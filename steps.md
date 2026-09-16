@@ -4,31 +4,60 @@
 
 A harness that launches multiple Claude-like agent workers and schedules
 their tasks the way an OS scheduler schedules processes, specifically a
-**Multi-Level Feedback Queue (MLFQ)**, but with the quantum defined in
-**units of work** (tool calls / reasoning turns / tokens consumed) instead
-of wall-clock time. Every scheduling decision is observable: which queue a
-task sits in, why it got preempted, why it got promoted or demoted, and how
-long it waited.
+**Multi-Level Feedback Queue (MLFQ)**. Two axes, kept deliberately
+separate:
+
+- **What a step/quantum *is*:** a unit of work (tool calls), not
+  wall-clock time. This is the preemption boundary and is immune to
+  per-call latency noise.
+- **What SJF orders tasks *by*:** a wall-clock time estimate. Each task
+  gets an expected-runtime prediction, and shorter-predicted tasks get
+  scheduled ahead of longer ones. These are two separate signals tracked
+  independently, not the same number used two ways.
+
+There is no fixed quantum size, per-level or otherwise. A **Planner**
+decides how each task is broken into steps and produces that task's
+expected-runtime estimate; there's no formula computing a constant.
+This is specifically for heterogeneous traffic: a short web-search task
+queued behind a long-running math task should be able to preempt it,
+run to completion, and let the math task resume, rather than wait behind
+it. That's the scenario preemption exists for, and SJF-with-preemption
+(effectively SRTF, shortest-remaining-time-first) is what realizes it.
+
+Every scheduling decision is observable: which queue a task sits in, why
+it got preempted, why it got promoted or demoted, and how long it waited.
 
 This only works if a worker's mid-task state can be paused and resumed
 without losing progress, so "preemption" is cheap. That constraint drives
 the whole design and is why it comes first below.
 
-**Three layers, not two.** Earlier phases implied Scheduler → Workers.
-There's actually a third layer above the scheduler:
+**Four layers, not two.** Earlier phases implied Scheduler → Workers.
+There are actually two layers above the scheduler, with distinct jobs —
+**naming these as two separate components (Orchestrator vs. Planner) is
+my structural call, not something you named explicitly; flag it if you
+want them merged or renamed:**
 
-- **Orchestrator/planner:** decides *how many* live workers exist right
-  now, scaling that pool up or down elastically based on available
-  resources (analogous to a Kubernetes HPA, not something this repo needs
-  Kubernetes for, just the same control-loop idea). Owns the worker pool.
+- **Orchestrator:** decides *how many* live workers exist right now,
+  scaling that pool up or down elastically based on available resources
+  (the AIMD concurrency policy below). Owns the worker pool. Nothing to
+  do with task content.
+- **Planner:** per task, decides how to break it into steps and predicts
+  that task's expected runtime (the SJF ranking signal). Driven by an LLM
+  call against a persistent **planning skill file** — an editable
+  instructions/heuristics document, not a numeric formula — that the
+  offline Sol job (Phase 7) rewrites based on where past predictions were
+  wrong. This is the component that "learns" in this design; nothing else
+  does.
 - **Scheduler (MLFQ):** given whatever pool the orchestrator currently
-  maintains, decides *which* ready task each free worker picks up next,
-  and enforces quantum/preemption/priority. Unchanged from Phases 2-3.
+  maintains and whatever estimates the planner currently attaches to each
+  task, decides *which* ready task each free worker picks up next, and
+  enforces the queue policy (SJF for levels 1-3, FIFO for level 4) and
+  preemption.
 - **Worker:** a *template*, not a fixed implementation. `generic_agent_harness`
   ships a `BaseWorker` (or similarly named abstract class) defining the
   agent-loop shape (reasoning turn → tool call → tool result →
-  checkpoint-at-quantum-boundary → next turn) plus the hooks the scheduler
-  and orchestrator need (`run_quantum()`, `checkpoint()`, `resume()`,
+  checkpoint-at-step-boundary → next turn) plus the hooks the scheduler
+  and orchestrator need (`run_step()`, `checkpoint()`, `resume()`,
   `is_done()`). A concrete task type subclasses it. This is what makes the
   repo a *generic* harness rather than a harness for one specific agent.
 
@@ -55,28 +84,44 @@ There's actually a third layer above the scheduler:
        tasks (Phase 6), scoring output quality with a stronger model than
        whatever's answering live requests, so the judge isn't grading its
        own homework.
-    2. Is the **offline learner** that updates the dynamic quantum-size
-       estimate (see Quantum below), by reviewing the day's LangSmith
-       traces and producing a new estimate for the live scheduler to read.
+    2. Is the **offline learner** that calibrates the Planner (see
+       "Offline job's role" below) by reviewing the day's LangSmith traces
+       and rewriting the planning skill file the live Planner reads.
   - "Claude-like worker" describes the agent-loop *shape* (reasoning turn
     → tool call → tool result → next turn, same structure documented for
     the Claude/Codex loop in the lecture deck), not a specific model or
     backend — both the live and offline paths implement the same `Worker`
     interface.
-- **Quantum:** counted in tool calls. The *size* of one quantum (how many
-  tool calls a task gets before preemption) is **not** computed fresh on
-  every request — that would put an expensive computation in the live
-  request path, which contradicts using the gateway for speed in the
-  first place. Instead: the live scheduler reads a per-queue-level
-  estimate that was last updated by the offline Sol job, and only
-  recomputes between daily runs. **This is my inference connecting the
-  "computed at runtime" answer to the "learn once a day" answer** — flag
-  it if that's not what was meant, since it's the single biggest driver
-  of how `Quantum` and the offline job's interface get built.
+- **Quantum:** counted in tool calls — this part is unchanged. There is
+  **no fixed size, per-level or otherwise, and no formula computing one.**
+  Each task's step boundaries are decided per-task by the Planner at
+  runtime, not looked up from a table. This replaces the earlier
+  "recompute between daily runs" framing entirely; that assumed a
+  learned constant existed to recompute, and it doesn't.
+- **Scheduling policy: 4-level MLFQ, SJF (levels 1-3) + FIFO (level 4).**
+  Within levels 1-3, tasks are ordered by the Planner's expected-runtime
+  estimate — shortest predicted first — and preemption makes this
+  effectively SRTF: a newly-arrived short-predicted task can preempt a
+  running longer one. Level 4 is a plain FIFO catch-all.
+  **Still open, not yet decided by you:** the exact demotion rule for
+  which tasks fall to level 4 (a task whose actual runtime blows past its
+  own predicted estimate is the natural candidate, since that's the same
+  signal the offline judge already needs — but that's my proposal, not a
+  decision yet) and the promotion/aging rule preventing level-4
+  starvation.
+- **Offline job's role, corrected:** it does not update a numeric
+  quantum/queue table. It's the **judge/calibrator of the Planner**:
+  for each task, it compares the Planner's predicted runtime against the
+  actually-observed runtime (from LangSmith traces — planner said 4s,
+  task took 10s) and rewrites the **planning skill file** to correct
+  systematic misestimation going forward. Also still runs the Phase 6
+  LLM-as-judge output-quality scoring, a separate job from this
+  calibration pass even though both run in the same daily Sol session.
 - **Observability:** LangSmith tracing on every scheduling event and every
   worker LLM call (reusing the pattern already proven in Agent Harness),
   both to power the Phase 5 dashboards and as the raw data the offline
-  Sol job reads to update the quantum estimate and run LLM-as-judge scoring.
+  Sol job reads to recalibrate the planning skill file and run
+  LLM-as-judge scoring.
 - **Stack:** Python, asyncio.
 - **Task source:** synthetic benchmark tasks that we author, so Phase 6's
   evaluation is controlled and repeatable.
@@ -87,7 +132,10 @@ There's actually a third layer above the scheduler:
   that boundary in from Phase 1 avoids a rewrite later. **Framework
   pick (not yet confirmed by you): FastAPI** — async-native, matches the
   asyncio stack, and the pool of currently-live workers can be exposed as
-  live state on the same app rather than a second service.
+  live state on the same app rather than a second service. **The response
+  contract for `POST /tasks` (task ID + separate status/result lookup vs.
+  something else) is explicitly deferred by you** — noted here so it
+  doesn't get silently decided by default when Phase 1 gets built.
 - **Orchestrator scaling policy:** driven by backlog, not by error/latency
   signals. Reasoning given: once the system is already resource-saturated,
   launching more workers doesn't help, so error rate isn't a useful
@@ -106,54 +154,72 @@ There's actually a third layer above the scheduler:
 ## Phase 0 — Scaffold & design doc
 
 - Repo layout: `worker/`, `scheduler/`, `observability/`, `tasks/`,
-  `api/` (the HTTP submission layer).
+  `api/` (the HTTP submission layer), `planner/`.
 - Define the core abstractions as plain data classes before writing any
   scheduling logic: `Task`, `Worker` (as the subclassable template
-  described above), `Quantum`, `Queue`, `SchedulerEvent`.
+  described above), `Quantum` (a work-based step boundary, size decided
+  per-task by the Planner, not a constant), `Queue`, `SchedulerEvent`,
+  `Planner`, `PlanningSkill` (the editable skill-file the offline job
+  rewrites).
 - No scheduling behavior yet. This phase just fixes vocabulary so Phase 1+
   isn't renaming things halfway through.
 
 ## Phase 1 — One worker, one task, checkpointable
 
 - A minimal HTTP endpoint (`POST /tasks`) accepts the one task, since
-  that's the standing decision for how tasks enter the system, not a
-  Python-script shortcut to be rewritten later.
+  that's the standing decision for how tasks enter the system (response
+  contract still deferred, see Decisions — a placeholder response is fine
+  for this phase).
+- The Planner runs once per task here too, even with nothing to schedule
+  against yet: it decides the task's step boundaries and produces an
+  expected-runtime estimate, using a seed/placeholder skill file (there's
+  no calibration history yet, since that only exists after Phase 5+7 run
+  at least once). The point of doing this now rather than bolting it on
+  later is so the Planner's interface and the estimate-vs-actual data
+  Phase 7 needs are already flowing before anything depends on them.
 - Get a single Claude-like worker (a first concrete subclass of the
   `BaseWorker` template) to run that task end-to-end.
-- Prove the worker's state can be serialized at a quantum boundary, the
+- Prove the worker's state can be serialized at a step boundary, the
   worker process stopped, and the task resumed later from that serialized
   state with no lost progress. This is the load-bearing primitive: if a
   task can't be paused and resumed cheaply, there is no MLFQ, just a
   worker pool with no real preemption.
 - No queues, no priority, no concurrency, no orchestrator yet. Just:
-  submit over HTTP, run, pause at a quantum boundary, resume, finish.
+  submit over HTTP, plan, run, pause at a step boundary, resume, finish.
 
 ## Phase 2 — Single queue, round robin, real preemption
 
-- Multiple tasks, one worker, one FIFO queue.
+- Multiple tasks, one worker, one FIFO queue. No SJF yet (a single FIFO
+  queue has nothing to order by), no Planner-driven prioritization —
+  purely proving preemption works at all.
 - Scheduler hands the worker the head-of-queue task, lets it run for
-  exactly one quantum, then actually preempts it (serialize state,
-  re-enqueue at the tail) regardless of whether it finished.
-- This is the first point where "quantum" is a real constraint instead of
-  a concept on paper. Get this loop rock solid before adding priority.
+  exactly one Planner-decided step, then actually preempts it (serialize
+  state, re-enqueue at the tail) regardless of whether it finished.
+- This is the first point where a step boundary is a real constraint
+  instead of a concept on paper. Get this loop rock solid before adding
+  priority.
 
-## Phase 3 — Multi-level feedback queues
+## Phase 3 — Multi-level feedback queues (SJF + FIFO hybrid)
 
-- N priority queues, shorter quantum at the top, longer quantum lower
-  down (classic MLFQ shape).
-- New tasks enter at the top queue.
-- A task that burns its full quantum without finishing gets demoted one
-  level. A task that yields before its quantum is up (blocked on a tool
-  call, waiting on something external) stays at its current level or gets
-  promoted, the same distinction a real OS scheduler makes between
-  CPU-bound and I/O-bound processes.
-- Add aging: a task starved at the bottom queue for too long gets
-  promoted back up, so no task waits forever.
+- 4 priority queues. Levels 1-3 order their tasks by the Planner's
+  expected-runtime estimate (SJF); level 4 is plain FIFO.
+- New tasks enter at level 1.
+- Preemption is where this pays off for heterogeneous traffic: a
+  short-predicted task arriving while a long-predicted one is running can
+  preempt it (this is what makes the SJF ordering effectively SRTF, not
+  just "sort once at arrival and never reconsider").
+- **Demotion/promotion rule still needs deciding (proposed, not
+  confirmed):** demote a task to the next level down when its actual
+  runtime significantly exceeds its own Planner-predicted estimate — the
+  same over/under-estimate signal Phase 7's offline judge uses, so
+  demotion and calibration would both read from one source of truth
+  instead of two. Aging/promotion at level 4 still needs its own rule so
+  a task that keeps blowing its estimates doesn't starve forever.
 
 ## Phase 4 — Orchestrator: elastic worker pool
 
 - A real worker pool, not a simulated one, but the pool size is no longer
-  fixed. The orchestrator/planner layer scales the number of live worker
+  fixed. The Orchestrator layer scales the number of live worker
   coroutines to track pending-request backlog, up to a configured max
   concurrency, and drains back down as the queue empties (see Orchestrator
   scaling policy in Decisions). The scheduler still decides which ready
@@ -180,10 +246,12 @@ There's actually a third layer above the scheduler:
 ## Phase 5 — Observability
 
 - Every scheduling decision emits a structured event: enqueue, dequeue,
-  quantum start/end, preemption, demotion, promotion, starvation-aging
+  step start/end, preemption, demotion, promotion, starvation-aging
   trigger.
 - Track per-task metrics: total wait time, number of preemptions, queue
-  level over time, turnaround time.
+  level over time, turnaround time, **and the Planner's predicted runtime
+  alongside the actually-observed runtime** — Phase 7 can't calibrate
+  anything without both numbers on the same task.
 - Export these as LangSmith traces, both for the live scheduler dashboard
   and as the dataset the Phase 7 offline job reads.
 
@@ -210,15 +278,20 @@ There's actually a third layer above the scheduler:
   [ASU's docs](https://docs.rc.asu.edu/vllm)) for the duration of that
   job only. Reached via SSH tunnel, not a persistent endpoint. A 4×80G
   request on a shared cluster may queue behind other jobs, so this phase
-  should also decide what the live scheduler does if a given day's
-  offline run doesn't complete in time (keep using yesterday's quantum
-  estimate is the obvious default, but write it down rather than leaving
-  it implicit).
-- Reads the day's LangSmith traces (Phase 5) and produces an updated
-  per-queue-level quantum-size estimate for the live scheduler to read on
-  its next run (closes the Quantum decision above).
+  should also decide what the live Planner does if a given day's offline
+  run doesn't complete in time (keep using yesterday's planning skill
+  file is the obvious default, but write it down rather than leaving it
+  implicit).
+- Reads the day's LangSmith traces (Phase 5) and, for each completed task,
+  compares the Planner's predicted runtime to what actually happened.
+  Rewrites the **planning skill file** to correct whatever systematic
+  pattern shows up (e.g. "predictions for tasks involving X tool tend to
+  run long, adjust upward"), for the live Planner to read starting next
+  run. This is the only thing in the system that "learns" — it edits an
+  instructions document, not a numeric table or a model's weights.
 - Also runs the LLM-as-judge scoring pass used in Phase 6.
-- Depends on Phase 5 existing (needs real trace data to learn from) and
-  is really only worth building once Phase 3's dynamic quantum sizing is
-  in place to consume its output — so this phase's own code can start
-  early, but it has nothing to plug into until then.
+- Depends on Phase 5 existing (needs real predicted-vs-actual trace data
+  to learn from) and on Phase 3's Planner/SJF machinery existing to
+  produce predictions worth calibrating in the first place — so this
+  phase's own code can start early, but it has nothing to plug into until
+  then.
