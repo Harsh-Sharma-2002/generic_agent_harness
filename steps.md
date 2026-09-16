@@ -158,11 +158,20 @@ There's actually a third layer above the scheduler:
   concurrency, and drains back down as the queue empties (see Orchestrator
   scaling policy in Decisions). The scheduler still decides which ready
   task each currently-live worker picks up.
-- **Still open: the actual max-concurrency number.** This needs to
-  reflect real capacity of the ASU gateway (undocumented rate limits, so
-  probably needs empirical discovery, e.g. ramping concurrency in a test
-  script until errors appear, similar to how `cold_email`'s pacing ramp
-  found a safe sending rate) rather than being picked arbitrarily.
+- **Max concurrency is adaptive, not pre-measured.** ASU RC's docs don't
+  publish a rate limit for this gateway anywhere, which rules out finding
+  one by deliberately ramping concurrent load until it breaks — that's a
+  real, not hypothetical, risk of getting flagged for abusive traffic on
+  a shared academic resource tied to your account. Instead, start
+  conservative (e.g. concurrency = 2) and adjust live during normal
+  operation, AIMD-style (the same shape as TCP congestion control, and
+  close in spirit to `cold_email`'s pacing ramp, but reactive instead of
+  a deliberate probe): increase by one after N consecutive clean
+  successes, cut sharply (e.g. halve) on the first error or clear
+  slowdown. The ceiling is discovered gradually through real traffic,
+  never through a dedicated load test, and if ASU RC support can just
+  tell you a real number (worth asking in their #rc-support Slack per
+  their own docs) that becomes the starting ceiling instead.
 - Also still open: what happens when the pool is already at max
   concurrency and a high-priority task arrives — does it preempt a
   running low-priority task early, or just wait for the next free/drained
