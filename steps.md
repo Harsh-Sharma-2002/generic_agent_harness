@@ -80,25 +80,53 @@ There's actually a third layer above the scheduler:
 - **Stack:** Python, asyncio.
 - **Task source:** synthetic benchmark tasks that we author, so Phase 6's
   evaluation is controlled and repeatable.
+- **Task submission:** HTTP API, not an in-process Python call. Chosen
+  deliberately over the simpler option because the goal is to keep this
+  close to how it would run in production, and because a future
+  containerized deployment would end up talking HTTP anyway, so building
+  that boundary in from Phase 1 avoids a rewrite later. **Framework
+  pick (not yet confirmed by you): FastAPI** — async-native, matches the
+  asyncio stack, and the pool of currently-live workers can be exposed as
+  live state on the same app rather than a second service.
+- **Orchestrator scaling policy:** driven by backlog, not by error/latency
+  signals. Reasoning given: once the system is already resource-saturated,
+  launching more workers doesn't help, so error rate isn't a useful
+  scale-*up* signal, only a scale-*down*/ceiling one, and the ceiling is
+  simpler to just set directly. Concretely: active worker coroutines track
+  the number of pending requests, up to a **configured max concurrency**
+  (a number reflecting known/assumed gateway capacity, not yet picked —
+  see open item in Phase 4), and scale back down as workers finish and
+  the queue empties.
+- **Scaled instance = asyncio coroutine** within one process (not a
+  separate OS process or node).
+- **Scale-down behavior = graceful drain**: a worker being scaled down
+  finishes its current quantum, then isn't given another task; no
+  mid-quantum hard preemption for this specific case.
 
 ## Phase 0 — Scaffold & design doc
 
-- Repo layout: `worker/`, `scheduler/`, `observability/`, `tasks/` (done).
+- Repo layout: `worker/`, `scheduler/`, `observability/`, `tasks/`,
+  `api/` (the HTTP submission layer).
 - Define the core abstractions as plain data classes before writing any
-  scheduling logic: `Task`, `Worker`, `Quantum`, `Queue`, `SchedulerEvent`.
+  scheduling logic: `Task`, `Worker` (as the subclassable template
+  described above), `Quantum`, `Queue`, `SchedulerEvent`.
 - No scheduling behavior yet. This phase just fixes vocabulary so Phase 1+
   isn't renaming things halfway through.
 
 ## Phase 1 — One worker, one task, checkpointable
 
-- Get a single Claude-like worker to run a task end-to-end.
+- A minimal HTTP endpoint (`POST /tasks`) accepts the one task, since
+  that's the standing decision for how tasks enter the system, not a
+  Python-script shortcut to be rewritten later.
+- Get a single Claude-like worker (a first concrete subclass of the
+  `BaseWorker` template) to run that task end-to-end.
 - Prove the worker's state can be serialized at a quantum boundary, the
   worker process stopped, and the task resumed later from that serialized
   state with no lost progress. This is the load-bearing primitive: if a
   task can't be paused and resumed cheaply, there is no MLFQ, just a
   worker pool with no real preemption.
-- No queues, no priority, no concurrency yet. Just: run, pause at a
-  quantum boundary, resume, finish.
+- No queues, no priority, no concurrency, no orchestrator yet. Just:
+  submit over HTTP, run, pause at a quantum boundary, resume, finish.
 
 ## Phase 2 — Single queue, round robin, real preemption
 
@@ -125,21 +153,20 @@ There's actually a third layer above the scheduler:
 ## Phase 4 — Orchestrator: elastic worker pool
 
 - A real worker pool, not a simulated one, but the pool size is no longer
-  fixed. The orchestrator/planner layer watches resource availability and
-  scales the number of live workers up or down; the scheduler still
-  decides which ready task each currently-live worker picks up. This
-  phase is where the earlier "fixed pool vs. scale-on-demand" open
-  question gets resolved by building scale-on-demand directly, per your
-  autoscaling requirement.
-- Needs answering (see questions below, this is the actual blocking part
-  of this phase): what signal drives scale-up/down decisions, what an
-  "instance" is concretely (concurrent asyncio workers in one process vs.
-  separate processes), and what happens to a worker's in-flight task when
-  the orchestrator scales that worker down.
-- Also still needs: what happens when all currently-live workers are busy
-  and a high-priority task arrives — does it preempt a running
-  low-priority task early, wait for the next quantum boundary, or trigger
-  an immediate scale-up instead of either?
+  fixed. The orchestrator/planner layer scales the number of live worker
+  coroutines to track pending-request backlog, up to a configured max
+  concurrency, and drains back down as the queue empties (see Orchestrator
+  scaling policy in Decisions). The scheduler still decides which ready
+  task each currently-live worker picks up.
+- **Still open: the actual max-concurrency number.** This needs to
+  reflect real capacity of the ASU gateway (undocumented rate limits, so
+  probably needs empirical discovery, e.g. ramping concurrency in a test
+  script until errors appear, similar to how `cold_email`'s pacing ramp
+  found a safe sending rate) rather than being picked arbitrarily.
+- Also still open: what happens when the pool is already at max
+  concurrency and a high-priority task arrives — does it preempt a
+  running low-priority task early, or just wait for the next free/drained
+  worker like everything else?
 
 ## Phase 5 — Observability
 
