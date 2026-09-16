@@ -14,6 +14,24 @@ This only works if a worker's mid-task state can be paused and resumed
 without losing progress, so "preemption" is cheap. That constraint drives
 the whole design and is why it comes first below.
 
+**Three layers, not two.** Earlier phases implied Scheduler → Workers.
+There's actually a third layer above the scheduler:
+
+- **Orchestrator/planner:** decides *how many* live workers exist right
+  now, scaling that pool up or down elastically based on available
+  resources (analogous to a Kubernetes HPA, not something this repo needs
+  Kubernetes for, just the same control-loop idea). Owns the worker pool.
+- **Scheduler (MLFQ):** given whatever pool the orchestrator currently
+  maintains, decides *which* ready task each free worker picks up next,
+  and enforces quantum/preemption/priority. Unchanged from Phases 2-3.
+- **Worker:** a *template*, not a fixed implementation. `generic_agent_harness`
+  ships a `BaseWorker` (or similarly named abstract class) defining the
+  agent-loop shape (reasoning turn → tool call → tool result →
+  checkpoint-at-quantum-boundary → next turn) plus the hooks the scheduler
+  and orchestrator need (`run_quantum()`, `checkpoint()`, `resume()`,
+  `is_done()`). A concrete task type subclasses it. This is what makes the
+  repo a *generic* harness rather than a harness for one specific agent.
+
 ## Decisions
 
 - **Worker, two-tier:** real LLM calls, not a simulated/mocked loop, split
@@ -104,14 +122,24 @@ the whole design and is why it comes first below.
 - Add aging: a task starved at the bottom queue for too long gets
   promoted back up, so no task waits forever.
 
-## Phase 4 — Multiple concurrent workers
+## Phase 4 — Orchestrator: elastic worker pool
 
-- A real worker pool, not a simulated one. The scheduler assigns
-  ready-queue tasks to whichever worker is free.
-- Decide and document the worker-pool sizing policy (fixed pool vs.
-  scale-on-demand) and what happens when all workers are busy and a
-  high-priority task arrives (does it preempt a running low-priority task
-  early, or wait for the next quantum boundary?).
+- A real worker pool, not a simulated one, but the pool size is no longer
+  fixed. The orchestrator/planner layer watches resource availability and
+  scales the number of live workers up or down; the scheduler still
+  decides which ready task each currently-live worker picks up. This
+  phase is where the earlier "fixed pool vs. scale-on-demand" open
+  question gets resolved by building scale-on-demand directly, per your
+  autoscaling requirement.
+- Needs answering (see questions below, this is the actual blocking part
+  of this phase): what signal drives scale-up/down decisions, what an
+  "instance" is concretely (concurrent asyncio workers in one process vs.
+  separate processes), and what happens to a worker's in-flight task when
+  the orchestrator scales that worker down.
+- Also still needs: what happens when all currently-live workers are busy
+  and a high-priority task arrives — does it preempt a running
+  low-priority task early, wait for the next quantum boundary, or trigger
+  an immediate scale-up instead of either?
 
 ## Phase 5 — Observability
 
