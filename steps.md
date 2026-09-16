@@ -35,7 +35,17 @@ Text2SQL Agent each keep private state, "one private pass"). So:
   state, just a class label and a bucket number. `task_class` comes from
   how the synthetic benchmark tasks are authored (Task source decision
   below) — each one is tagged with a class at creation, so no
-  inference step is needed at all.
+  inference step is needed at all. **Task class = tool profile as the
+  primary key (e.g. "web-search-heavy," "long-computation,"
+  "multi-tool-chain" — mirrors your own short-search-vs-long-math
+  example directly), with expected step count as a secondary feature**,
+  so the table has two axes to calibrate against, not one.
+  **Cold start (day zero, before Phase 7 has ever run): every class maps
+  to the same single bucket**, i.e. plain FIFO with no real SJF advantage
+  yet. Deliberately honest about having zero information rather than
+  guessing — and it means Phase 6 can measure "how many days of
+  calibration until SJF actually beats FIFO," which is a result worth
+  having on its own, not just a bootstrapping detail.
 - **Planner (private, inside the Worker):** handles per-task step
   decomposition and in-flight re-estimation, with full access to task
   content, because it lives inside the worker actually running that task
@@ -125,6 +135,31 @@ earlier "Planner as a separate layer" framing:**
 - **Quantum:** counted in tool calls — unchanged. Still no fixed size;
   step boundaries are decided per-task, privately, by the Worker's
   internal Planner, not looked up from any table.
+- **Planner cadence: exception-driven, not fixed.** One LLM call plans
+  the whole task up front (step decomposition + initial estimate). It is
+  **not** re-invoked on a fixed schedule; it's re-invoked only when
+  something already looks wrong, per your two triggers:
+  1. A step's validation fails — retry that same step once against the
+     existing plan first (most validation failures are transient, not a
+     sign the plan itself is wrong); only trigger a full re-plan if it
+     fails a second time in a row.
+  2. A step's actual duration significantly overruns its allocated share
+     of the original estimate (e.g. >1.5-2x) — trigger a re-plan
+     immediately, no retry, since this is a direct signal the original
+     estimate was wrong rather than a transient failure.
+  **The retry-once-before-replanning rule and the specific overrun
+  threshold are my proposal filling in your two triggers, not something
+  you specified precisely — flag if you want different numbers or logic.**
+  This keeps the common case (task goes according to plan) to a single
+  LLM call, and only pays for more when the plan has actually been
+  falsified by something observed.
+- **Reporting to the scheduler:** after every step (whether or not that
+  step triggered a re-plan), the worker reports its current best
+  remaining-time estimate as a plain number. If no re-plan happened, this
+  is just the original estimate minus progress so far; if a re-plan
+  happened, it's the revised number. The scheduler treats every such
+  report as a fresh opportunity to reconsider preemption, so it doesn't
+  need any separate polling mechanism.
 - **Scheduling policy: 4-level MLFQ, SJF (levels 1-3) + FIFO (level 4).**
   Two distinct signals feed this, not one:
   - **At admission**, the deterministic `task_class → time bucket` table
@@ -198,7 +233,8 @@ earlier "Planner as a separate layer" framing:**
   top-level one), `scheduler/`, `observability/`, `tasks/`, `api/` (the
   HTTP submission layer).
 - Define the core abstractions as plain data classes before writing any
-  scheduling logic: `Task` (carries a `task_class` label), `Worker` (as
+  scheduling logic: `Task` (carries a `task_class` label — tool profile
+  as primary key, expected step count as a secondary feature), `Worker` (as
   the subclassable template described above, owns a `Planner` instance
   internally), `Quantum` (a work-based step boundary, size decided
   privately per-task by the Worker's Planner, not a constant), `Queue`,
