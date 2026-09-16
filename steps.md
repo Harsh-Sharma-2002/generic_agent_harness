@@ -16,23 +16,49 @@ the whole design and is why it comes first below.
 
 ## Decisions
 
-- **Worker:** real Claude API calls (via `ANTHROPIC_API_KEY` in a
-  gitignored `.env`), not a simulated/mocked LLM loop. The `Worker`
-  interface is still written against an abstract base so a simulated
-  worker can be swapped in later for fast iteration if benchmark runs get
-  too slow/expensive, but real calls are the default from Phase 1 on.
-- **Quantum:** counted in tool calls, but the *size* of one quantum (how
-  many tool calls a task gets before preemption) is computed dynamically
-  at runtime per task/queue-level rather than hardcoded as a fixed
-  constant per level. Rationale given: a fixed constant would need
-  retuning/recomputing as the task mix or worker behavior changes, so the
-  scheduler should derive it from something observed at runtime (e.g. a
-  running estimate of that task's typical tool-call cost) instead.
-  **This still needs one more concrete decision before Phase 3:** what
-  exactly the runtime computation is based on (recent tool-call latency
-  for that task? a moving average across the queue level? something
-  else?). Flagging this now rather than guessing, since it changes how
-  `Quantum` is implemented.
+- **Worker, two-tier:** real LLM calls, not a simulated/mocked loop, split
+  across a live path and an offline path rather than one fixed backend.
+  - *Live path:* every task the scheduler actually runs during the day
+    goes through ASU Research Computing's free OpenAI-compatible gateway
+    (`ASU_LLM_BASE_URL=https://openai.rc.asu.edu/v1`, key in a gitignored
+    `.env` as `ASU_LLM_API_KEY`). Chosen because it's instant and
+    always-on, so the scheduler's own event loop never blocks on a Slurm
+    queue. **Which catalog model backs the live path is still open** —
+    `glm-5-2` was the earlier recommendation (tagged for tool-driven agent
+    loops, LiveBench 82.5) but this needs an explicit confirm, not an
+    assumed default.
+  - *Offline path:* once a day, a Slurm batch job on Sol
+    (`-p htc -G a100:1 -C a100_40`, per
+    [ASU's vLLM docs](https://docs.rc.asu.edu/vllm)) spins up a larger
+    self-hosted open-source model, reachable only via SSH tunnel for the
+    life of that job. This model is *not* in the live request path; it
+    does two things once a day, then the job ends:
+    1. Acts as **LLM-as-judge** over a sample of the day's completed
+       tasks (Phase 6), scoring output quality with a stronger model than
+       whatever's answering live requests, so the judge isn't grading its
+       own homework.
+    2. Is the **offline learner** that updates the dynamic quantum-size
+       estimate (see Quantum below), by reviewing the day's LangSmith
+       traces and producing a new estimate for the live scheduler to read.
+  - "Claude-like worker" describes the agent-loop *shape* (reasoning turn
+    → tool call → tool result → next turn, same structure documented for
+    the Claude/Codex loop in the lecture deck), not a specific model or
+    backend — both the live and offline paths implement the same `Worker`
+    interface.
+- **Quantum:** counted in tool calls. The *size* of one quantum (how many
+  tool calls a task gets before preemption) is **not** computed fresh on
+  every request — that would put an expensive computation in the live
+  request path, which contradicts using the gateway for speed in the
+  first place. Instead: the live scheduler reads a per-queue-level
+  estimate that was last updated by the offline Sol job, and only
+  recomputes between daily runs. **This is my inference connecting the
+  "computed at runtime" answer to the "learn once a day" answer** — flag
+  it if that's not what was meant, since it's the single biggest driver
+  of how `Quantum` and the offline job's interface get built.
+- **Observability:** LangSmith tracing on every scheduling event and every
+  worker LLM call (reusing the pattern already proven in Agent Harness),
+  both to power the Phase 5 dashboards and as the raw data the offline
+  Sol job reads to update the quantum estimate and run LLM-as-judge scoring.
 - **Stack:** Python, asyncio.
 - **Task source:** synthetic benchmark tasks that we author, so Phase 6's
   evaluation is controlled and repeatable.
@@ -94,18 +120,36 @@ the whole design and is why it comes first below.
   trigger.
 - Track per-task metrics: total wait time, number of preemptions, queue
   level over time, turnaround time.
-- Export these as traces/dashboards. Reuse the LangSmith-style tracing
-  pattern already proven out in Agent Harness if that fits, or build a
-  minimal custom exporter if this project needs to stay framework-agnostic.
+- Export these as LangSmith traces, both for the live scheduler dashboard
+  and as the dataset the Phase 7 offline job reads.
 
 ## Phase 6 — Evaluation (the research-paper payoff)
 
 - Benchmark the work-based MLFQ against a naive baseline (plain FIFO,
   or round robin with no priority levels) on the same task mix.
-- Metrics: average turnaround time, average wait time, fairness across
-  task types, starvation incidents, and whether the work-based quantum
-  (vs. a time-based quantum) changes the results in a way worth writing
-  up.
+- Scheduling metrics: average turnaround time, average wait time,
+  fairness across task types, starvation incidents, and whether the
+  work-based quantum (vs. a time-based quantum) changes the results in a
+  way worth writing up.
+- Output-quality metric: LLM-as-judge, using the offline Sol model (not
+  the live gateway model) to score a sample of task outputs, so schedule
+  changes that speed things up but degrade output quality actually show
+  up in the results.
 - This phase is where the paper's actual claims get tested, so the task
   mix used for benchmarking should be decided and written down before
   running it, not chosen after seeing which results look best.
+
+## Phase 7 — Offline daily learning loop (Sol)
+
+- A Slurm batch job on Sol, run once a day, hosting a larger open-source
+  model via vLLM (per
+  [ASU's docs](https://docs.rc.asu.edu/vllm)) for the duration of that
+  job only. Reached via SSH tunnel, not a persistent endpoint.
+- Reads the day's LangSmith traces (Phase 5) and produces an updated
+  per-queue-level quantum-size estimate for the live scheduler to read on
+  its next run (closes the Quantum decision above).
+- Also runs the LLM-as-judge scoring pass used in Phase 6.
+- Depends on Phase 5 existing (needs real trace data to learn from) and
+  is really only worth building once Phase 3's dynamic quantum sizing is
+  in place to consume its output — so this phase's own code can start
+  early, but it has nothing to plug into until then.
