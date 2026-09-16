@@ -14,18 +14,34 @@ This only works if a worker's mid-task state can be paused and resumed
 without losing progress, so "preemption" is cheap. That constraint drives
 the whole design and is why it comes first below.
 
-**Open decision (fill in before Phase 1 is considered done):** the exact
-unit of one work quantum. Candidates:
-- N tool calls (simplest, closest to a classic scheduler tick)
-- N LLM turns / reasoning steps
-- N tokens consumed (closest to real cost/resource usage, but noisier)
+## Decisions
+
+- **Worker:** real Claude API calls (via `ANTHROPIC_API_KEY` in a
+  gitignored `.env`), not a simulated/mocked LLM loop. The `Worker`
+  interface is still written against an abstract base so a simulated
+  worker can be swapped in later for fast iteration if benchmark runs get
+  too slow/expensive, but real calls are the default from Phase 1 on.
+- **Quantum:** counted in tool calls, but the *size* of one quantum (how
+  many tool calls a task gets before preemption) is computed dynamically
+  at runtime per task/queue-level rather than hardcoded as a fixed
+  constant per level. Rationale given: a fixed constant would need
+  retuning/recomputing as the task mix or worker behavior changes, so the
+  scheduler should derive it from something observed at runtime (e.g. a
+  running estimate of that task's typical tool-call cost) instead.
+  **This still needs one more concrete decision before Phase 3:** what
+  exactly the runtime computation is based on (recent tool-call latency
+  for that task? a moving average across the queue level? something
+  else?). Flagging this now rather than guessing, since it changes how
+  `Quantum` is implemented.
+- **Stack:** Python, asyncio.
+- **Task source:** synthetic benchmark tasks that we author, so Phase 6's
+  evaluation is controlled and repeatable.
 
 ## Phase 0 — Scaffold & design doc
 
-- Repo layout: `worker/`, `scheduler/`, `observability/`, `tasks/`.
+- Repo layout: `worker/`, `scheduler/`, `observability/`, `tasks/` (done).
 - Define the core abstractions as plain data classes before writing any
   scheduling logic: `Task`, `Worker`, `Quantum`, `Queue`, `SchedulerEvent`.
-- Write down the exact quantum unit (the open decision above).
 - No scheduling behavior yet. This phase just fixes vocabulary so Phase 1+
   isn't renaming things halfway through.
 
