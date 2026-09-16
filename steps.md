@@ -31,6 +31,14 @@ This only works if a worker's mid-task state can be paused and resumed
 without losing progress, so "preemption" is cheap. That constraint drives
 the whole design and is why it comes first below.
 
+**Not an inference-serving optimization.** This operates at the task/job
+level: deciding which queued task gets a worker next, to cut wait time
+before a task starts running at all. That's a different layer from
+things like vLLM's continuous batching or KV-cache management, which
+optimize token generation throughput inside a single already-running
+model-serving instance. Worth stating plainly since it's the kind of
+distinction a paper reviewer will otherwise ask about.
+
 **Four layers, not two.** Earlier phases implied Scheduler → Workers.
 There are actually two layers above the scheduler, with distinct jobs —
 **naming these as two separate components (Orchestrator vs. Planner) is
@@ -224,6 +232,14 @@ want them merged or renamed:**
   concurrency, and drains back down as the queue empties (see Orchestrator
   scaling policy in Decisions). The scheduler still decides which ready
   task each currently-live worker picks up.
+- **The concurrency cap is a local-run constraint, not a ceiling on the
+  design.** This phase is built and tested locally, bounded by the free
+  ASU gateway and local machine resources, so a low, adaptive cap is
+  correct here. On a real cloud deployment the same backlog-driven
+  scaling mechanism applies with a much higher (or effectively
+  unbounded) ceiling — the elasticity claim is about the mechanism
+  (scale count tracks backlog), not about how high this particular local
+  setup happens to scale.
 - **Max concurrency is adaptive, not pre-measured.** ASU RC's docs don't
   publish a rate limit for this gateway anywhere, which rules out finding
   one by deliberately ramping concurrent load until it breaks — that's a
