@@ -15,14 +15,33 @@ separate:
   scheduled ahead of longer ones. These are two separate signals tracked
   independently, not the same number used two ways.
 
-There is no fixed quantum size, per-level or otherwise. A **Planner**
-decides how each task is broken into steps and produces that task's
-expected-runtime estimate; there's no formula computing a constant.
-This is specifically for heterogeneous traffic: a short web-search task
-queued behind a long-running math task should be able to preempt it,
-run to completion, and let the math task resume, rather than wait behind
-it. That's the scenario preemption exists for, and SJF-with-preemption
-(effectively SRTF, shortest-remaining-time-first) is what realizes it.
+There is no fixed quantum size, per-level or otherwise, and no per-task
+LLM call decides the SJF ranking. This is specifically for heterogeneous
+traffic: a short web-search task queued behind a long-running math task
+should be able to preempt it, run to completion, and let the math task
+resume, rather than wait behind it. That's the scenario preemption exists
+for, and SJF-with-preemption (effectively SRTF, shortest-remaining-time-
+first) is what realizes it.
+
+**Two separate calibrated artifacts, not one.** Resolves a real tension:
+SJF needs a runtime signal available *before* a task has a worker, but
+task content should never leave the worker that's privately handling it
+(same principle Agent Harness already uses — Web Search Agent and
+Text2SQL Agent each keep private state, "one private pass"). So:
+
+- **Admission table (shared, content-free):** a deterministic, hardcoded
+  lookup, `task_class → time bucket`, consulted at submission for SJF
+  ordering. No LLM call, no task content crosses into shared scheduler
+  state, just a class label and a bucket number. `task_class` comes from
+  how the synthetic benchmark tasks are authored (Task source decision
+  below) — each one is tagged with a class at creation, so no
+  inference step is needed at all.
+- **Planner (private, inside the Worker):** handles per-task step
+  decomposition and in-flight re-estimation, with full access to task
+  content, because it lives inside the worker actually running that task
+  rather than a separate pre-scheduling component. Its output never
+  needs to leave the worker except as plain numbers (e.g. "demote me,"
+  "N steps remaining") for the scheduler to act on.
 
 Every scheduling decision is observable: which queue a task sits in, why
 it got preempted, why it got promoted or demoted, and how long it waited.
@@ -39,28 +58,23 @@ optimize token generation throughput inside a single already-running
 model-serving instance. Worth stating plainly since it's the kind of
 distinction a paper reviewer will otherwise ask about.
 
-**Four layers, not two.** Earlier phases implied Scheduler → Workers.
-There are actually two layers above the scheduler, with distinct jobs —
-**naming these as two separate components (Orchestrator vs. Planner) is
-my structural call, not something you named explicitly; flag it if you
-want them merged or renamed:**
+**Three layers plus a private in-worker component.** Earlier phases
+implied Scheduler → Workers; there's an Orchestrator above the scheduler,
+and the Planner lives inside the Worker rather than as a fourth top-level
+layer — **this placement is per your last message, superseding the
+earlier "Planner as a separate layer" framing:**
 
 - **Orchestrator:** decides *how many* live workers exist right now,
   scaling that pool up or down elastically based on available resources
-  (the AIMD concurrency policy below). Owns the worker pool. Nothing to
-  do with task content.
-- **Planner:** per task, decides how to break it into steps and predicts
-  that task's expected runtime (the SJF ranking signal). Driven by an LLM
-  call against a persistent **planning skill file** — an editable
-  instructions/heuristics document, not a numeric formula — that the
-  offline Sol job (Phase 7) rewrites based on where past predictions were
-  wrong. This is the component that "learns" in this design; nothing else
-  does.
+  (the AIMD concurrency policy below). Owns the worker pool. Never sees
+  task content.
 - **Scheduler (MLFQ):** given whatever pool the orchestrator currently
-  maintains and whatever estimates the planner currently attaches to each
-  task, decides *which* ready task each free worker picks up next, and
-  enforces the queue policy (SJF for levels 1-3, FIFO for level 4) and
-  preemption.
+  maintains, decides *which* ready task each free worker picks up next,
+  using the admission table for initial SJF ordering and each running
+  task's own numeric self-reports for anything after that. Enforces the
+  queue policy (SJF for levels 1-3, FIFO for level 4) and preemption.
+  Never sees task content either — only class labels, bucket numbers, and
+  whatever plain numbers a worker's private Planner chooses to surface.
 - **Worker:** a *template*, not a fixed implementation. `generic_agent_harness`
   ships a `BaseWorker` (or similarly named abstract class) defining the
   agent-loop shape (reasoning turn → tool call → tool result →
@@ -68,6 +82,12 @@ want them merged or renamed:**
   and orchestrator need (`run_step()`, `checkpoint()`, `resume()`,
   `is_done()`). A concrete task type subclasses it. This is what makes the
   repo a *generic* harness rather than a harness for one specific agent.
+  **Owns its own Planner internally** — full access to task content,
+  decides step decomposition and in-flight re-estimation privately, and
+  is the only thing in the system driven by a per-task LLM call against
+  the editable **planning skill file** (Phase 7 rewrites this based on
+  where past in-flight predictions were wrong — separate from the
+  admission table's calibration, see Decisions).
 
 ## Decisions
 
@@ -92,44 +112,57 @@ want them merged or renamed:**
        tasks (Phase 6), scoring output quality with a stronger model than
        whatever's answering live requests, so the judge isn't grading its
        own homework.
-    2. Is the **offline learner** that calibrates the Planner (see
-       "Offline job's role" below) by reviewing the day's LangSmith traces
-       and rewriting the planning skill file the live Planner reads.
+    2. Recalibrates **both** learning artifacts (see Quantum/Scheduling
+       policy and Offline job's role below): the admission table and each
+       worker's private planning skill file.
   - "Claude-like worker" describes the agent-loop *shape* (reasoning turn
     → tool call → tool result → next turn, same structure documented for
     the Claude/Codex loop in the lecture deck), not a specific model or
-    backend — both the live and offline paths implement the same `Worker`
-    interface.
-- **Quantum:** counted in tool calls — this part is unchanged. There is
-  **no fixed size, per-level or otherwise, and no formula computing one.**
-  Each task's step boundaries are decided per-task by the Planner at
-  runtime, not looked up from a table. This replaces the earlier
-  "recompute between daily runs" framing entirely; that assumed a
-  learned constant existed to recompute, and it doesn't.
+    backend. **Corrected:** the offline path is a one-shot judge/
+    calibrator over trace data, not an agentic worker running
+    checkpointable steps, so it does not implement the `Worker` interface
+    the way the live path's task-executing workers do.
+- **Quantum:** counted in tool calls — unchanged. Still no fixed size;
+  step boundaries are decided per-task, privately, by the Worker's
+  internal Planner, not looked up from any table.
 - **Scheduling policy: 4-level MLFQ, SJF (levels 1-3) + FIFO (level 4).**
-  Within levels 1-3, tasks are ordered by the Planner's expected-runtime
-  estimate — shortest predicted first — and preemption makes this
-  effectively SRTF: a newly-arrived short-predicted task can preempt a
-  running longer one. Level 4 is a plain FIFO catch-all.
+  Two distinct signals feed this, not one:
+  - **At admission**, the deterministic `task_class → time bucket` table
+    (no LLM, no content exposure) places a new task into level 1 and
+    gives it its initial SJF ordering value.
+  - **Once a task has a worker**, its private in-worker Planner can
+    revise that number as real progress is observed, and the scheduler
+    acts on the plain-number update — this is what lets preemption
+    trigger even after admission, not just at arrival.
+  Preemption makes this effectively SRTF: a task whose current
+  (admission-table or worker-revised) estimate is shorter than what's
+  running can preempt it. Level 4 is a plain FIFO catch-all.
   **Still open, not yet decided by you:** the exact demotion rule for
   which tasks fall to level 4 (a task whose actual runtime blows past its
-  own predicted estimate is the natural candidate, since that's the same
-  signal the offline judge already needs — but that's my proposal, not a
-  decision yet) and the promotion/aging rule preventing level-4
+  current estimate is the natural candidate, since that's the same signal
+  the offline job already calibrates against — but that's my proposal,
+  not a decision yet) and the promotion/aging rule preventing level-4
   starvation.
-- **Offline job's role, corrected:** it does not update a numeric
-  quantum/queue table. It's the **judge/calibrator of the Planner**:
-  for each task, it compares the Planner's predicted runtime against the
-  actually-observed runtime (from LangSmith traces — planner said 4s,
-  task took 10s) and rewrites the **planning skill file** to correct
-  systematic misestimation going forward. Also still runs the Phase 6
-  LLM-as-judge output-quality scoring, a separate job from this
-  calibration pass even though both run in the same daily Sol session.
+- **Offline job's role, corrected again:** two separate calibration
+  passes, not one:
+  1. **Admission table recalibration** — statistical, not LLM-based:
+     group the day's completed tasks by `task_class`, compare actual
+     runtime against the bucket they were assigned, and update the
+     table's per-class bucket (e.g. shift a class's bucket up if it's
+     consistently running longer than assigned). Easy to version and
+     validate against a held-out slice before swapping in, since it's a
+     small table, not free text.
+  2. **Planning skill file recalibration** — for each task, compares the
+     *worker's own* in-flight Planner predictions against what actually
+     happened, and rewrites the skill file every worker's Planner reads,
+     to correct systematic in-flight misestimation.
+  Also still runs the Phase 6 LLM-as-judge output-quality scoring, a
+  third, separate pass, even though all three run in the same daily Sol
+  session.
 - **Observability:** LangSmith tracing on every scheduling event and every
   worker LLM call (reusing the pattern already proven in Agent Harness),
   both to power the Phase 5 dashboards and as the raw data the offline
-  Sol job reads to recalibrate the planning skill file and run
-  LLM-as-judge scoring.
+  Sol job reads for both calibration passes and LLM-as-judge scoring.
 - **Stack:** Python, asyncio.
 - **Task source:** synthetic benchmark tasks that we author, so Phase 6's
   evaluation is controlled and repeatable.
@@ -161,14 +194,18 @@ want them merged or renamed:**
 
 ## Phase 0 — Scaffold & design doc
 
-- Repo layout: `worker/`, `scheduler/`, `observability/`, `tasks/`,
-  `api/` (the HTTP submission layer), `planner/`.
+- Repo layout: `worker/` (Planner lives inside this package, not its own
+  top-level one), `scheduler/`, `observability/`, `tasks/`, `api/` (the
+  HTTP submission layer).
 - Define the core abstractions as plain data classes before writing any
-  scheduling logic: `Task`, `Worker` (as the subclassable template
-  described above), `Quantum` (a work-based step boundary, size decided
-  per-task by the Planner, not a constant), `Queue`, `SchedulerEvent`,
-  `Planner`, `PlanningSkill` (the editable skill-file the offline job
-  rewrites).
+  scheduling logic: `Task` (carries a `task_class` label), `Worker` (as
+  the subclassable template described above, owns a `Planner` instance
+  internally), `Quantum` (a work-based step boundary, size decided
+  privately per-task by the Worker's Planner, not a constant), `Queue`,
+  `SchedulerEvent`, `PlanningSkill` (the worker-private skill-file the
+  offline job rewrites), `AdmissionTable` (the shared `task_class → time
+  bucket` lookup, also offline-job-rewritten but statistically, not via
+  LLM).
 - No scheduling behavior yet. This phase just fixes vocabulary so Phase 1+
   isn't renaming things halfway through.
 
@@ -177,16 +214,18 @@ want them merged or renamed:**
 - A minimal HTTP endpoint (`POST /tasks`) accepts the one task, since
   that's the standing decision for how tasks enter the system (response
   contract still deferred, see Decisions — a placeholder response is fine
-  for this phase).
-- The Planner runs once per task here too, even with nothing to schedule
-  against yet: it decides the task's step boundaries and produces an
-  expected-runtime estimate, using a seed/placeholder skill file (there's
-  no calibration history yet, since that only exists after Phase 5+7 run
-  at least once). The point of doing this now rather than bolting it on
-  later is so the Planner's interface and the estimate-vs-actual data
-  Phase 7 needs are already flowing before anything depends on them.
+  for this phase). The task carries a `task_class` label, authored in
+  directly since tasks are synthetic (Task source decision).
 - Get a single Claude-like worker (a first concrete subclass of the
-  `BaseWorker` template) to run that task end-to-end.
+  `BaseWorker` template, owning its own Planner internally) to run that
+  task end-to-end. The Planner decides step boundaries and produces
+  in-flight estimates privately, using a seed/placeholder skill file
+  (there's no calibration history yet, since that only exists after
+  Phase 5+7 run at least once). Doing this now rather than bolting it on
+  later means the Planner's interface and the estimate-vs-actual data
+  Phase 7 needs are already flowing before anything depends on them. No
+  admission table needed yet — that only matters once there's more than
+  one task to rank (Phase 3).
 - Prove the worker's state can be serialized at a step boundary, the
   worker process stopped, and the task resumed later from that serialized
   state with no lost progress. This is the load-bearing primitive: if a
@@ -198,19 +237,23 @@ want them merged or renamed:**
 ## Phase 2 — Single queue, round robin, real preemption
 
 - Multiple tasks, one worker, one FIFO queue. No SJF yet (a single FIFO
-  queue has nothing to order by), no Planner-driven prioritization —
-  purely proving preemption works at all.
+  queue has nothing to order by), no admission table needed — purely
+  proving preemption works at all.
 - Scheduler hands the worker the head-of-queue task, lets it run for
-  exactly one Planner-decided step, then actually preempts it (serialize
-  state, re-enqueue at the tail) regardless of whether it finished.
+  exactly one step (boundary decided privately by that worker's own
+  Planner), then actually preempts it (serialize state, re-enqueue at the
+  tail) regardless of whether it finished.
 - This is the first point where a step boundary is a real constraint
   instead of a concept on paper. Get this loop rock solid before adding
   priority.
 
 ## Phase 3 — Multi-level feedback queues (SJF + FIFO hybrid)
 
-- 4 priority queues. Levels 1-3 order their tasks by the Planner's
-  expected-runtime estimate (SJF); level 4 is plain FIFO.
+- 4 priority queues. Levels 1-3 order tasks by SJF; level 4 is plain
+  FIFO. The SJF value starts as an admission-table lookup
+  (`task_class → time bucket`, no LLM call) and gets revised by that
+  task's own worker-private Planner once it's running, so ordering can
+  change mid-flight, not just at arrival.
 - New tasks enter at level 1.
 - Preemption is where this pays off for heterogeneous traffic: a
   short-predicted task arriving while a long-predicted one is running can
@@ -218,8 +261,8 @@ want them merged or renamed:**
   just "sort once at arrival and never reconsider").
 - **Demotion/promotion rule still needs deciding (proposed, not
   confirmed):** demote a task to the next level down when its actual
-  runtime significantly exceeds its own Planner-predicted estimate — the
-  same over/under-estimate signal Phase 7's offline judge uses, so
+  runtime significantly exceeds its current estimate — the same
+  over/under-estimate signal Phase 7's offline calibration passes use, so
   demotion and calibration would both read from one source of truth
   instead of two. Aging/promotion at level 4 still needs its own rule so
   a task that keeps blowing its estimates doesn't starve forever.
@@ -265,16 +308,20 @@ want them merged or renamed:**
   step start/end, preemption, demotion, promotion, starvation-aging
   trigger.
 - Track per-task metrics: total wait time, number of preemptions, queue
-  level over time, turnaround time, **and the Planner's predicted runtime
-  alongside the actually-observed runtime** — Phase 7 can't calibrate
-  anything without both numbers on the same task.
+  level over time, turnaround time, **the task's `task_class` and its
+  admission-table bucket, and the worker's private Planner's predicted
+  runtime, alongside the actually-observed runtime** — Phase 7 can't run
+  either calibration pass without all of these on the same task.
 - Export these as LangSmith traces, both for the live scheduler dashboard
   and as the dataset the Phase 7 offline job reads.
 
 ## Phase 6 — Evaluation (the research-paper payoff)
 
-- Benchmark the work-based MLFQ against a naive baseline (plain FIFO,
-  or round robin with no priority levels) on the same task mix.
+- **Baseline, now precisely defined:** the identical system (same Worker,
+  same private Planner, same step mechanism) with the scheduler ignoring
+  SJF ordering and using plain FIFO/round-robin instead. This isolates
+  the actual variable under test (the scheduling policy) instead of
+  comparing against a differently-built system.
 - Scheduling metrics: average turnaround time, average wait time,
   fairness across task types, starvation incidents, and whether the
   work-based quantum (vs. a time-based quantum) changes the results in a
@@ -294,20 +341,27 @@ want them merged or renamed:**
   [ASU's docs](https://docs.rc.asu.edu/vllm)) for the duration of that
   job only. Reached via SSH tunnel, not a persistent endpoint. A 4×80G
   request on a shared cluster may queue behind other jobs, so this phase
-  should also decide what the live Planner does if a given day's offline
-  run doesn't complete in time (keep using yesterday's planning skill
-  file is the obvious default, but write it down rather than leaving it
-  implicit).
-- Reads the day's LangSmith traces (Phase 5) and, for each completed task,
-  compares the Planner's predicted runtime to what actually happened.
-  Rewrites the **planning skill file** to correct whatever systematic
-  pattern shows up (e.g. "predictions for tasks involving X tool tend to
-  run long, adjust upward"), for the live Planner to read starting next
-  run. This is the only thing in the system that "learns" — it edits an
-  instructions document, not a numeric table or a model's weights.
+  should also decide what the live system does if a given day's offline
+  run doesn't complete in time (keep using yesterday's admission table
+  and skill file is the obvious default, but write it down rather than
+  leaving it implicit).
+- Reads the day's LangSmith traces (Phase 5) and runs **two separate
+  calibration passes**:
+  1. **Admission table** — statistical: group completed tasks by
+     `task_class`, compare actual runtime to the bucket each was
+     assigned, adjust that class's bucket. Small table, easy to version
+     and validate against a held-out slice before it replaces the live
+     one.
+  2. **Planning skill file** — for each task, compares that task's own
+     worker-private Planner prediction to what actually happened, and
+     rewrites the skill file every worker's Planner reads, to correct
+     systematic in-flight misestimation. This one edits an instructions
+     document, not a table, so it has no equivalent natural regularization
+     — worth applying the same held-out-validation-before-swap discipline
+     here too, even though the mechanism is fuzzier.
 - Also runs the LLM-as-judge scoring pass used in Phase 6.
 - Depends on Phase 5 existing (needs real predicted-vs-actual trace data
-  to learn from) and on Phase 3's Planner/SJF machinery existing to
-  produce predictions worth calibrating in the first place — so this
-  phase's own code can start early, but it has nothing to plug into until
-  then.
+  for both passes) and on Phase 3's admission-table/SJF machinery and
+  Phase 1's Planner existing to produce predictions worth calibrating in
+  the first place — so this phase's own code can start early, but it has
+  nothing to plug into until then.
