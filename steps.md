@@ -23,16 +23,16 @@ the whole design and is why it comes first below.
     (`ASU_LLM_BASE_URL=https://openai.rc.asu.edu/v1`, key in a gitignored
     `.env` as `ASU_LLM_API_KEY`). Chosen because it's instant and
     always-on, so the scheduler's own event loop never blocks on a Slurm
-    queue. **Which catalog model backs the live path is still open** —
-    `glm-5-2` was the earlier recommendation (tagged for tool-driven agent
-    loops, LiveBench 82.5) but this needs an explicit confirm, not an
-    assumed default.
-  - *Offline path:* once a day, a Slurm batch job on Sol
-    (`-p htc -G a100:1 -C a100_40`, per
-    [ASU's vLLM docs](https://docs.rc.asu.edu/vllm)) spins up a larger
-    self-hosted open-source model, reachable only via SSH tunnel for the
-    life of that job. This model is *not* in the live request path; it
-    does two things once a day, then the job ends:
+    queue. **Model: `glm-5-2`** (ASU catalog tags it for tool-driven agent
+    loops, LiveBench 82.5, 131K context).
+  - *Offline path:* once a day, a Slurm batch job on Sol spins up
+    **Qwen2.5-72B-Instruct** (the strongest model in ASU's vLLM table,
+    requiring `4×80G A100s` per
+    [ASU's docs](https://docs.rc.asu.edu/vllm) — picked for judge/learner
+    quality, hardware need accepted as a cost of that choice), reachable
+    only via SSH tunnel for the life of that job. This model is *not* in
+    the live request path; it does two things once a day, then the job
+    ends:
     1. Acts as **LLM-as-judge** over a sample of the day's completed
        tasks (Phase 6), scoring output quality with a stronger model than
        whatever's answering live requests, so the judge isn't grading its
@@ -141,10 +141,15 @@ the whole design and is why it comes first below.
 
 ## Phase 7 — Offline daily learning loop (Sol)
 
-- A Slurm batch job on Sol, run once a day, hosting a larger open-source
-  model via vLLM (per
+- A Slurm batch job on Sol, run once a day, hosting Qwen2.5-72B-Instruct
+  via vLLM (`4×80G A100s`, per
   [ASU's docs](https://docs.rc.asu.edu/vllm)) for the duration of that
-  job only. Reached via SSH tunnel, not a persistent endpoint.
+  job only. Reached via SSH tunnel, not a persistent endpoint. A 4×80G
+  request on a shared cluster may queue behind other jobs, so this phase
+  should also decide what the live scheduler does if a given day's
+  offline run doesn't complete in time (keep using yesterday's quantum
+  estimate is the obvious default, but write it down rather than leaving
+  it implicit).
 - Reads the day's LangSmith traces (Phase 5) and produces an updated
   per-queue-level quantum-size estimate for the live scheduler to read on
   its next run (closes the Quantum decision above).
