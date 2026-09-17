@@ -1,16 +1,18 @@
 """
 Measures average response time for ASU Research Computing's OpenAI-compatible
-LLM gateway (see steps.md: ASU_LLM_BASE_URL / ASU_LLM_API_KEY, live path).
+LLM gateway. Config lives in the gitignored .env at the repo root (see
+.env.example): ASU_LLM_API_KEY, ASU_LLM_BASE_URL, ASU_LLM_MODEL.
 
 Sends N sequential, non-streaming chat completions and reports wall-clock
 latency stats. Runs with thinking off by default (chat.py's default); pass
 --thinking to benchmark the model's reasoning path instead, or --both to
 compare the two back to back.
 
-Usage:
-    .venv/bin/python benchmark_latency.py
-    .venv/bin/python benchmark_latency.py -n 20
-    .venv/bin/python benchmark_latency.py --both
+Usage (from the repo root):
+    .venv/bin/python scripts/benchmark_latency.py
+    .venv/bin/python scripts/benchmark_latency.py -n 20
+    .venv/bin/python scripts/benchmark_latency.py --model glm-5-3-flash
+    .venv/bin/python scripts/benchmark_latency.py --both
 """
 
 from __future__ import annotations
@@ -96,8 +98,10 @@ def summarize(label: str, latencies: list[float]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
+    default_model = os.environ.get("ASU_LLM_MODEL", DEFAULT_MODEL)
     parser.add_argument("-n", "--num-requests", type=int, default=10, help="Requests per configuration (default: 10)")
-    parser.add_argument("--model", default=DEFAULT_MODEL, help=f"Model id (default: {DEFAULT_MODEL})")
+    parser.add_argument("--model", default=default_model,
+                         help=f"Model id (default: {default_model}, from ASU_LLM_MODEL)")
     parser.add_argument("--max-tokens", type=int, default=300, help="Max completion tokens per request (default: 300)")
     parser.add_argument("--thinking", action="store_true", help="Benchmark with thinking on instead of off")
     parser.add_argument("--both", action="store_true", help="Benchmark thinking off AND on, back to back")

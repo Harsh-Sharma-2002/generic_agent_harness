@@ -1,15 +1,16 @@
 """
 Interactive, continuous chat against ASU Research Computing's OpenAI-compatible
-LLM gateway (see steps.md: ASU_LLM_BASE_URL / ASU_LLM_API_KEY, live path).
+LLM gateway. Config lives in the gitignored .env at the repo root (see
+.env.example): ASU_LLM_API_KEY, ASU_LLM_BASE_URL, ASU_LLM_MODEL.
 
-Thinking is off by default: glm-5-2 is a hybrid reasoning model, and its
-hidden reasoning_content burns completion tokens before the real answer
-shows up (see tests/test_asu_llm_api.py). --thinking turns it back on.
+Thinking is off by default: the default model is a hybrid reasoning model,
+and its hidden reasoning_content burns completion tokens before the real
+answer shows up (see tests/test_asu_llm_api.py). --thinking turns it back on.
 
-Usage:
-    .venv/bin/python chat.py
-    .venv/bin/python chat.py --model glm-5-2
-    .venv/bin/python chat.py --thinking
+Usage (from the repo root):
+    .venv/bin/python scripts/chat.py
+    .venv/bin/python scripts/chat.py --model glm-5-3-flash
+    .venv/bin/python scripts/chat.py --thinking
 
 Type 'exit', 'quit', or press Ctrl+D to end the session.
 """
@@ -35,7 +36,7 @@ def get_client() -> OpenAI:
     if not api_key:
         sys.exit(
             "ASU_LLM_API_KEY is not set.\n"
-            "Set it in the gitignored .env at the repo root (see steps.md), "
+            "Set it in the gitignored .env at the repo root (see .env.example), "
             "or export it directly in your shell."
         )
     base_url = os.environ.get("ASU_LLM_BASE_URL", DEFAULT_BASE_URL)
@@ -43,8 +44,10 @@ def get_client() -> OpenAI:
 
 
 def main() -> None:
+    default_model = os.environ.get("ASU_LLM_MODEL", DEFAULT_MODEL)
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--model", default=DEFAULT_MODEL, help=f"Model id (default: {DEFAULT_MODEL})")
+    parser.add_argument("--model", default=default_model,
+                         help=f"Model id (default: {default_model}, from ASU_LLM_MODEL)")
     parser.add_argument("--max-tokens", type=int, default=800, help="Max completion tokens per turn (default: 800)")
     parser.add_argument(
         "--thinking", action="store_true",

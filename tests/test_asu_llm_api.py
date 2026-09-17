@@ -2,10 +2,11 @@
 Connectivity tests for ASU Research Computing's OpenAI-compatible LLM
 gateway (see steps.md: "Worker, two-tier" / live path).
 
-Config comes from the environment -- ASU_LLM_API_KEY and ASU_LLM_BASE_URL,
-loaded from the gitignored .env at the repo root via conftest.py. The whole
-module is skipped, not failed, when the key isn't present, so the suite
-still runs in environments (e.g. CI) without the secret configured.
+Config comes from the environment -- ASU_LLM_API_KEY, ASU_LLM_BASE_URL and
+ASU_LLM_MODEL (see .env.example), loaded from the gitignored .env at the
+repo root via conftest.py. The whole module is skipped, not failed, when
+the key isn't present, so the suite still runs in environments (e.g. CI)
+without the secret configured.
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ from openai import AuthenticationError, OpenAI
 
 API_KEY = os.environ.get("ASU_LLM_API_KEY")
 BASE_URL = os.environ.get("ASU_LLM_BASE_URL", "https://openai.rc.asu.edu/v1")
-MODEL = os.environ.get("ASU_LLM_TEST_MODEL", "glm-5-2")
+MODEL = os.environ.get("ASU_LLM_MODEL", "glm-5-2")
 
 pytestmark = pytest.mark.skipif(
     not API_KEY, reason="ASU_LLM_API_KEY not set; skipping live gateway tests"
