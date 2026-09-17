@@ -31,7 +31,7 @@ load_dotenv()
 from openai import OpenAI
 
 DEFAULT_BASE_URL = "https://openai.rc.asu.edu/v1"
-DEFAULT_MODEL = "glm-5-2"
+DEFAULT_MODEL = "glm-5-3-flash"
 
 
 def make_prompt() -> str:

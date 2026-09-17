@@ -18,7 +18,7 @@ from openai import AuthenticationError, OpenAI
 
 API_KEY = os.environ.get("ASU_LLM_API_KEY")
 BASE_URL = os.environ.get("ASU_LLM_BASE_URL", "https://openai.rc.asu.edu/v1")
-MODEL = os.environ.get("ASU_LLM_MODEL", "glm-5-2")
+MODEL = os.environ.get("ASU_LLM_MODEL", "glm-5-3-flash")
 
 pytestmark = pytest.mark.skipif(
     not API_KEY, reason="ASU_LLM_API_KEY not set; skipping live gateway tests"
@@ -37,10 +37,10 @@ def test_list_models_returns_known_model(client: OpenAI) -> None:
 
 
 def test_chat_completion_returns_nonempty_text(client: OpenAI) -> None:
-    # glm-5-2 is a reasoning model: left on, it spends completion tokens on
-    # hidden reasoning_content before emitting the actual answer, so a tight
-    # max_tokens budget can hit finish_reason="length" with content=None even
-    # though the call itself succeeded. chat_template_kwargs.enable_thinking
+    # GLM's hybrid-thinking models spend completion tokens on hidden
+    # reasoning_content before emitting the actual answer when left on, so a
+    # tight max_tokens budget can hit finish_reason="length" with content=None
+    # even though the call itself succeeded. chat_template_kwargs.enable_thinking
     # turns that off (vLLM's hook for GLM's hybrid thinking mode), so a small
     # budget is enough again.
     response = client.chat.completions.create(
