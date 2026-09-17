@@ -36,14 +36,17 @@ def test_list_models_returns_known_model(client: OpenAI) -> None:
 
 
 def test_chat_completion_returns_nonempty_text(client: OpenAI) -> None:
-    # glm-5-2 is a reasoning model: it spends completion tokens on hidden
-    # reasoning_content before emitting the actual answer, so a tight
-    # max_tokens budget can hit finish_reason="length" with content=None
-    # even though the call itself succeeded. Budget generously here.
+    # glm-5-2 is a reasoning model: left on, it spends completion tokens on
+    # hidden reasoning_content before emitting the actual answer, so a tight
+    # max_tokens budget can hit finish_reason="length" with content=None even
+    # though the call itself succeeded. chat_template_kwargs.enable_thinking
+    # turns that off (vLLM's hook for GLM's hybrid thinking mode), so a small
+    # budget is enough again.
     response = client.chat.completions.create(
         model=MODEL,
         messages=[{"role": "user", "content": "Reply with exactly one word: pong"}],
-        max_tokens=300,
+        max_tokens=50,
+        extra_body={"chat_template_kwargs": {"enable_thinking": False}},
     )
     choice = response.choices[0]
     content = choice.message.content
