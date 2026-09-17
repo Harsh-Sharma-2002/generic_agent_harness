@@ -15,13 +15,38 @@ separate:
   scheduled ahead of longer ones. These are two separate signals tracked
   independently, not the same number used two ways.
 
-There is no fixed quantum size, per-level or otherwise, and no per-task
-LLM call decides the SJF ranking. This is specifically for heterogeneous
-traffic: a short web-search task queued behind a long-running math task
-should be able to preempt it, run to completion, and let the math task
-resume, rather than wait behind it. That's the scenario preemption exists
-for, and SJF-with-preemption (effectively SRTF, shortest-remaining-time-
-first) is what realizes it.
+There is no fixed quantum size, per-level or otherwise, and no dedicated
+"planner" component decides the SJF ranking. This is specifically for
+heterogeneous traffic: a short web-search task queued behind a
+long-running math task should be able to preempt it, run to completion,
+and let the math task resume, rather than wait behind it. That's the
+scenario preemption exists for, and SJF-with-preemption (effectively
+SRTF, shortest-remaining-time-first) is what realizes it.
+
+**Two generic node types, not a growing list of named components.** The
+whole worker is built from exactly two primitives, each specialized by
+which markdown file it reads rather than by being a bespoke class:
+
+- **`LLMCaller`:** makes one LLM call. What it actually does — decompose
+  a task and produce an estimate, continue an existing plan, judge output
+  quality, whatever — comes from how the Worker's own code prompts it at
+  that point, on top of a single governing markdown file (`llm_caller.md`)
+  that defines its general behavior/conventions. **My reading of "each
+  node reads their own md," not something you specified in this much
+  detail — flag it if you meant one markdown file per *role* (planning,
+  execution, judging) instead of one per *node type* with role-specific
+  prompting layered on top.**
+- **`ToolCaller`:** executes an actual tool call, reading its own
+  `tool_caller.md` the same way.
+
+A **step/quantum is exactly one `LLMCaller` invocation plus the
+`ToolCaller` call(s) it triggers** — the same reasoning-turn → tool-call
+→ tool-result loop already documented for the Claude/Codex agent loop in
+the lecture deck, now also the concrete definition of the preemption
+boundary. This replaces the earlier design's separate "Planner"
+component; decomposition and runtime estimation are just one particular
+thing an `LLMCaller` is asked to do (typically on a task's first
+invocation), not a different component with different rules.
 
 **Two separate calibrated artifacts, not one.** Resolves a real tension:
 SJF needs a runtime signal available *before* a task has a worker, but
@@ -34,24 +59,28 @@ Text2SQL Agent each keep private state, "one private pass"). So:
   ordering. No LLM call, no task content crosses into shared scheduler
   state, just a class label and a bucket number. `task_class` comes from
   how the synthetic benchmark tasks are authored (Task source decision
-  below) — each one is tagged with a class at creation, so no
-  inference step is needed at all. **Task class = tool profile as the
-  primary key (e.g. "web-search-heavy," "long-computation,"
-  "multi-tool-chain" — mirrors your own short-search-vs-long-math
-  example directly), with expected step count as a secondary feature**,
-  so the table has two axes to calibrate against, not one.
-  **Cold start (day zero, before Phase 7 has ever run): every class maps
-  to the same single bucket**, i.e. plain FIFO with no real SJF advantage
-  yet. Deliberately honest about having zero information rather than
-  guessing — and it means Phase 6 can measure "how many days of
-  calibration until SJF actually beats FIFO," which is a result worth
-  having on its own, not just a bootstrapping detail.
-- **Planner (private, inside the Worker):** handles per-task step
-  decomposition and in-flight re-estimation, with full access to task
-  content, because it lives inside the worker actually running that task
-  rather than a separate pre-scheduling component. Its output never
-  needs to leave the worker except as plain numbers (e.g. "demote me,"
-  "N steps remaining") for the scheduler to act on.
+  below) — each one is tagged with a class at creation, so no inference
+  step is needed at all. **Task class = tool profile as the primary key**
+  (e.g. "web-search-heavy," "long-computation," "multi-tool-chain" —
+  mirrors your own short-search-vs-long-math example directly), **with
+  expected step count as a secondary feature**, so the table has two axes
+  to calibrate against, not one. **Cold start (day zero, before Phase 7
+  has ever run): every class maps to the same single bucket**, i.e. plain
+  FIFO with no real SJF advantage yet. Deliberately honest about having
+  zero information rather than guessing — and it means Phase 6 can
+  measure "how many days of calibration until SJF actually beats FIFO,"
+  a result worth having on its own, not just a bootstrapping detail. This
+  stays exactly as designed regardless of the `LLMCaller`/`ToolCaller`
+  simplification — it was never an LLM-driven artifact, and shouldn't
+  become one, since that would reintroduce the cost/latency/privacy
+  problem it was built to avoid.
+- **`LLMCaller`'s in-flight behavior (private, inside the Worker):**
+  handles per-task step decomposition and in-flight re-estimation, with
+  full access to task content, because it lives inside the worker
+  actually running that task rather than a separate pre-scheduling
+  component. Its output never needs to leave the worker except as plain
+  numbers (e.g. "demote me," "N steps remaining") for the scheduler to
+  act on.
 
 Every scheduling decision is observable: which queue a task sits in, why
 it got preempted, why it got promoted or demoted, and how long it waited.
@@ -68,11 +97,8 @@ optimize token generation throughput inside a single already-running
 model-serving instance. Worth stating plainly since it's the kind of
 distinction a paper reviewer will otherwise ask about.
 
-**Three layers plus a private in-worker component.** Earlier phases
-implied Scheduler → Workers; there's an Orchestrator above the scheduler,
-and the Planner lives inside the Worker rather than as a fourth top-level
-layer — **this placement is per your last message, superseding the
-earlier "Planner as a separate layer" framing:**
+**Three layers.** Earlier phases implied Scheduler → Workers; there's an
+Orchestrator above the scheduler too:
 
 - **Orchestrator:** decides *how many* live workers exist right now,
   scaling that pool up or down elastically based on available resources
@@ -84,20 +110,16 @@ earlier "Planner as a separate layer" framing:**
   task's own numeric self-reports for anything after that. Enforces the
   queue policy (SJF for levels 1-3, FIFO for level 4) and preemption.
   Never sees task content either — only class labels, bucket numbers, and
-  whatever plain numbers a worker's private Planner chooses to surface.
+  whatever plain numbers a worker's `LLMCaller` chooses to surface.
 - **Worker:** a *template*, not a fixed implementation. `generic_agent_harness`
-  ships a `BaseWorker` (or similarly named abstract class) defining the
-  agent-loop shape (reasoning turn → tool call → tool result →
-  checkpoint-at-step-boundary → next turn) plus the hooks the scheduler
-  and orchestrator need (`run_step()`, `checkpoint()`, `resume()`,
-  `is_done()`). A concrete task type subclasses it. This is what makes the
-  repo a *generic* harness rather than a harness for one specific agent.
-  **Owns its own Planner internally** — full access to task content,
-  decides step decomposition and in-flight re-estimation privately, and
-  is the only thing in the system driven by a per-task LLM call against
-  the editable **planning skill file** (Phase 7 rewrites this based on
-  where past in-flight predictions were wrong — separate from the
-  admission table's calibration, see Decisions).
+  ships a `BaseWorker` (or similarly named abstract class) built from an
+  `LLMCaller` and a `ToolCaller`, plus the hooks the scheduler and
+  orchestrator need (`run_step()`, `checkpoint()`, `resume()`,
+  `is_done()`). A concrete task type subclasses it. Keeping the worker
+  down to two generic, markdown-configured primitives (rather than
+  bespoke components like a dedicated "Planner" class) is what makes the
+  repo a genuinely *generic* template, not just a harness for one
+  specific agent with extra reusable-sounding names.
 
 ## Decisions
 
@@ -122,57 +144,57 @@ earlier "Planner as a separate layer" framing:**
        tasks (Phase 6), scoring output quality with a stronger model than
        whatever's answering live requests, so the judge isn't grading its
        own homework.
-    2. Recalibrates **both** learning artifacts (see Quantum/Scheduling
-       policy and Offline job's role below): the admission table and each
-       worker's private planning skill file.
+    2. Recalibrates **both** learning artifacts (see Scheduling policy
+       and Offline job's role below): the admission table and the
+       `LLMCaller`/`ToolCaller` markdown files.
   - "Claude-like worker" describes the agent-loop *shape* (reasoning turn
     → tool call → tool result → next turn, same structure documented for
     the Claude/Codex loop in the lecture deck), not a specific model or
-    backend. **Corrected:** the offline path is a one-shot judge/
-    calibrator over trace data, not an agentic worker running
-    checkpointable steps, so it does not implement the `Worker` interface
-    the way the live path's task-executing workers do.
+    backend. The offline path is a one-shot judge/calibrator over trace
+    data, not an agentic worker running checkpointable steps, so it does
+    not implement the `Worker` interface the way the live path's
+    task-executing workers do.
 - **Quantum:** counted in tool calls — unchanged. Still no fixed size;
-  step boundaries are decided per-task, privately, by the Worker's
-  internal Planner, not looked up from any table.
-- **Planner cadence: exception-driven, not fixed.** One LLM call plans
-  the whole task up front (step decomposition + initial estimate). It is
-  **not** re-invoked on a fixed schedule; it's re-invoked only when
-  something already looks wrong, per your two triggers:
+  a step boundary is one `LLMCaller` invocation plus the `ToolCaller`
+  call(s) it triggers, decided in the moment, not looked up from any
+  table or decided by a separate component.
+- **`LLMCaller` invocation cadence: exception-driven, not fixed.** One
+  call plans the whole task up front (step decomposition + initial
+  estimate). It is **not** re-invoked on a fixed schedule; it's
+  re-invoked only when something already looks wrong, per your two
+  triggers:
   1. A step's validation fails — retry that same step once against the
      existing plan first (most validation failures are transient, not a
-     sign the plan itself is wrong); only trigger a full re-plan if it
-     fails a second time in a row.
+     sign the plan itself is wrong); only trigger a fresh `LLMCaller`
+     invocation to re-plan if it fails a second time in a row.
   2. A step's actual duration significantly overruns its allocated share
-     of the original estimate — trigger a re-plan immediately, no retry,
-     since this is a direct signal the original estimate was wrong rather
-     than a transient failure. **The overrun threshold is per-`task_class`,
-     not a fixed global ratio** (e.g. 1.5-2x): a short task naturally has
-     much noisier relative timing than a long one, so one constant can't
-     be right for both. This threshold is calibrated by the same Phase 7
-     statistical pass that calibrates the admission table, not a
-     hand-picked number.
-  **Corrected after review — a real gap in the first version of this
-  rule:** there was no cap on repeated failures. A task whose steps keep
-  failing (bad tool, genuinely unsolvable step) could loop
-  fail→retry→fail→re-plan indefinitely, hogging a worker forever — the
+     of the original estimate — trigger a re-plan invocation immediately,
+     no retry, since this is a direct signal the original estimate was
+     wrong rather than a transient failure. **The overrun threshold is
+     per-`task_class`, not a fixed global ratio** (e.g. 1.5-2x): a short
+     task naturally has much noisier relative timing than a long one, so
+     one constant can't be right for both. This threshold is calibrated
+     by the same Phase 7 statistical pass that calibrates the admission
+     table, not a hand-picked number.
+  **`MAX_REPLAN_ATTEMPTS` bounds repeated failures**, so a task whose
+  steps keep failing (bad tool, genuinely unsolvable step) can't loop
+  fail→retry→fail→re-plan indefinitely and hog a worker forever — the
   same bug class already found for real in Agent Harness's `decisions.py`
   (the discovery loop caps itself at `MAX_DISCOVERY_ITERATIONS = 4`, the
-  SQL retry loop doesn't cap at all). **`MAX_REPLAN_ATTEMPTS`** bounds
-  this: once exceeded, the task fails outright instead of continuing to
-  loop.
-  This keeps the common case (task goes according to plan) to a single
-  LLM call, and only pays for more when the plan has actually been
-  falsified by something observed. **Still open:** whether to distinguish
-  transient failures (timeout, rate limit — retry is worth it) from
-  deterministic ones (malformed query, wrong argument shape — retrying
-  the identical step will fail identically, so the retry is pure waste).
-  Real refinement, adds complexity (requires classifying *why* a step
-  failed), not yet decided whether it's worth it.
+  SQL retry loop doesn't cap at all). Once exceeded, the task fails
+  outright instead of continuing to loop. This keeps the common case
+  (task goes according to plan) to a single LLM call, and only pays for
+  more when the plan has actually been falsified by something observed.
+  **Still open:** whether to distinguish transient failures (timeout,
+  rate limit — retry is worth it) from deterministic ones (malformed
+  query, wrong argument shape — retrying the identical step will fail
+  identically, so the retry is pure waste). Real refinement, adds
+  complexity (requires classifying *why* a step failed), not yet decided
+  whether it's worth it.
 - **Reporting to the scheduler:** after every step (whether or not that
-  step triggered a re-plan), the worker reports its current best
-  remaining-time estimate as a plain number. If no re-plan happened, this
-  is just the original estimate minus progress so far; if a re-plan
+  step triggered a re-plan invocation), the worker reports its current
+  best remaining-time estimate as a plain number. If no re-plan happened,
+  this is just the original estimate minus progress so far; if a re-plan
   happened, it's the revised number. The scheduler treats every such
   report as a fresh opportunity to reconsider preemption, so it doesn't
   need any separate polling mechanism.
@@ -181,10 +203,10 @@ earlier "Planner as a separate layer" framing:**
   - **At admission**, the deterministic `task_class → time bucket` table
     (no LLM, no content exposure) places a new task into level 1 and
     gives it its initial SJF ordering value.
-  - **Once a task has a worker**, its private in-worker Planner can
-    revise that number as real progress is observed, and the scheduler
-    acts on the plain-number update — this is what lets preemption
-    trigger even after admission, not just at arrival.
+  - **Once a task has a worker**, its `LLMCaller` can revise that number
+    as real progress is observed, and the scheduler acts on the
+    plain-number update — this is what lets preemption trigger even after
+    admission, not just at arrival.
   Preemption makes this effectively SRTF: a task whose current
   (admission-table or worker-revised) estimate is shorter than what's
   running can preempt it. Level 4 is a plain FIFO catch-all.
@@ -194,8 +216,7 @@ earlier "Planner as a separate layer" framing:**
   the offline job already calibrates against — but that's my proposal,
   not a decision yet) and the promotion/aging rule preventing level-4
   starvation.
-- **Offline job's role, corrected again:** two separate calibration
-  passes, not one:
+- **Offline job's role:** two separate calibration passes, not one:
   1. **Admission table recalibration** — statistical, not LLM-based:
      group the day's completed tasks by `task_class`, compare actual
      runtime against the bucket they were assigned, and update the
@@ -203,10 +224,14 @@ earlier "Planner as a separate layer" framing:**
      consistently running longer than assigned). Easy to version and
      validate against a held-out slice before swapping in, since it's a
      small table, not free text.
-  2. **Planning skill file recalibration** — for each task, compares the
-     *worker's own* in-flight Planner predictions against what actually
-     happened, and rewrites the skill file every worker's Planner reads,
-     to correct systematic in-flight misestimation.
+  2. **`llm_caller.md` (and, if warranted, `tool_caller.md`)
+     recalibration** — for each task, compares the worker's own in-flight
+     `LLMCaller` predictions against what actually happened, and rewrites
+     the markdown file every worker's `LLMCaller` reads, to correct
+     systematic in-flight misestimation. Edits an instructions document,
+     not a table, so it has no equivalent natural regularization — apply
+     the same held-out-validation-before-swap discipline here too, even
+     though the mechanism is fuzzier.
   Also still runs the Phase 6 LLM-as-judge output-quality scoring, a
   third, separate pass, even though all three run in the same daily Sol
   session.
@@ -245,20 +270,24 @@ earlier "Planner as a separate layer" framing:**
 
 ## Phase 0 — Scaffold & design doc
 
-- Repo layout: `worker/` (Planner lives inside this package, not its own
-  top-level one), `scheduler/`, `observability/`, `tasks/`, `api/` (the
-  HTTP submission layer).
+- Repo layout: `worker/` (contains `LLMCaller`, `ToolCaller`, and a
+  `skills/` subfolder holding `llm_caller.md` and `tool_caller.md`),
+  `scheduler/`, `observability/`, `tasks/`, `api/` (the HTTP submission
+  layer).
 - Define the core abstractions as plain data classes before writing any
   scheduling logic: `Task` (carries a `task_class` label — tool profile
-  as primary key, expected step count as a secondary feature), `Worker` (as
-  the subclassable template described above, owns a `Planner` instance
-  internally), `Quantum` (a work-based step boundary, size decided
-  privately per-task by the Worker's Planner, not a constant), `Queue`,
-  `SchedulerEvent`, `PlanningSkill` (the worker-private skill-file the
-  offline job rewrites), `AdmissionTable` (the shared `task_class → time
-  bucket` lookup, also offline-job-rewritten but statistically, not via
-  LLM). `MAX_REPLAN_ATTEMPTS` is a constant here too, from day one — not
-  something to bolt on after hitting the retry-loop bug for real.
+  as primary key, expected step count as a secondary feature), `Worker`
+  (as the subclassable template described above, built from an
+  `LLMCaller` and a `ToolCaller`), `Quantum` (a work-based step boundary
+  — one `LLMCaller` invocation plus its `ToolCaller` call(s), not a
+  constant), `Queue`, `SchedulerEvent`, `NodeSkill` (a small versioned
+  wrapper around a markdown file — both `llm_caller.md` and
+  `tool_caller.md` use this, so the held-out-validation-before-swap
+  discipline applies uniformly), `AdmissionTable` (the shared
+  `task_class → time bucket` lookup, offline-job-rewritten statistically,
+  never via LLM). `MAX_REPLAN_ATTEMPTS` is a constant here too, from day
+  one — not something to bolt on after hitting the retry-loop bug for
+  real.
 - No scheduling behavior yet. This phase just fixes vocabulary so Phase 1+
   isn't renaming things halfway through.
 
@@ -270,15 +299,15 @@ earlier "Planner as a separate layer" framing:**
   for this phase). The task carries a `task_class` label, authored in
   directly since tasks are synthetic (Task source decision).
 - Get a single Claude-like worker (a first concrete subclass of the
-  `BaseWorker` template, owning its own Planner internally) to run that
-  task end-to-end. The Planner decides step boundaries and produces
-  in-flight estimates privately, using a seed/placeholder skill file
-  (there's no calibration history yet, since that only exists after
-  Phase 5+7 run at least once). Doing this now rather than bolting it on
-  later means the Planner's interface and the estimate-vs-actual data
-  Phase 7 needs are already flowing before anything depends on them. No
-  admission table needed yet — that only matters once there's more than
-  one task to rank (Phase 3).
+  `BaseWorker` template, built from an `LLMCaller` and a `ToolCaller`) to
+  run that task end-to-end. The `LLMCaller`'s first invocation for a task
+  decides step boundaries and produces an in-flight estimate, using
+  seed/placeholder `llm_caller.md` and `tool_caller.md` files (there's no
+  calibration history yet, since that only exists after Phase 5+7 run at
+  least once). Doing this now rather than bolting it on later means the
+  estimate-vs-actual data Phase 7 needs is already flowing before
+  anything depends on it. No admission table needed yet — that only
+  matters once there's more than one task to rank (Phase 3).
 - Prove the worker's state can be serialized at a step boundary, the
   worker process stopped, and the task resumed later from that serialized
   state with no lost progress. This is the load-bearing primitive: if a
@@ -293,8 +322,8 @@ earlier "Planner as a separate layer" framing:**
   queue has nothing to order by), no admission table needed — purely
   proving preemption works at all.
 - Scheduler hands the worker the head-of-queue task, lets it run for
-  exactly one step (boundary decided privately by that worker's own
-  Planner), then actually preempts it (serialize state, re-enqueue at the
+  exactly one step (one `LLMCaller` invocation plus its `ToolCaller`
+  call(s)), then actually preempts it (serialize state, re-enqueue at the
   tail) regardless of whether it finished.
 - This is the first point where a step boundary is a real constraint
   instead of a concept on paper. Get this loop rock solid before adding
@@ -305,7 +334,7 @@ earlier "Planner as a separate layer" framing:**
 - 4 priority queues. Levels 1-3 order tasks by SJF; level 4 is plain
   FIFO. The SJF value starts as an admission-table lookup
   (`task_class → time bucket`, no LLM call) and gets revised by that
-  task's own worker-private Planner once it's running, so ordering can
+  task's own worker's `LLMCaller` once it's running, so ordering can
   change mid-flight, not just at arrival.
 - New tasks enter at level 1.
 - Preemption is where this pays off for heterogeneous traffic: a
@@ -365,19 +394,19 @@ earlier "Planner as a separate layer" framing:**
   likely to reveal scheduling problems.
 - Track per-task metrics: total wait time, number of preemptions, queue
   level over time, turnaround time, **the task's `task_class` and its
-  admission-table bucket, and the worker's private Planner's predicted
-  runtime, alongside the actually-observed runtime** — Phase 7 can't run
-  either calibration pass without all of these on the same task.
+  admission-table bucket, and the worker's `LLMCaller` predicted runtime,
+  alongside the actually-observed runtime** — Phase 7 can't run either
+  calibration pass without all of these on the same task.
 - Export these as LangSmith traces, both for the live scheduler dashboard
   and as the dataset the Phase 7 offline job reads.
 
 ## Phase 6 — Evaluation (the research-paper payoff)
 
-- **Baseline, now precisely defined:** the identical system (same Worker,
-  same private Planner, same step mechanism) with the scheduler ignoring
-  SJF ordering and using plain FIFO/round-robin instead. This isolates
-  the actual variable under test (the scheduling policy) instead of
-  comparing against a differently-built system.
+- **Baseline, precisely defined:** the identical system (same Worker,
+  same `LLMCaller`/`ToolCaller`, same step mechanism) with the scheduler
+  ignoring SJF ordering and using plain FIFO/round-robin instead. This
+  isolates the actual variable under test (the scheduling policy) instead
+  of comparing against a differently-built system.
 - Scheduling metrics: average turnaround time, average wait time,
   fairness across task types, starvation incidents, and whether the
   work-based quantum (vs. a time-based quantum) changes the results in a
@@ -399,8 +428,8 @@ earlier "Planner as a separate layer" framing:**
   request on a shared cluster may queue behind other jobs, so this phase
   should also decide what the live system does if a given day's offline
   run doesn't complete in time (keep using yesterday's admission table
-  and skill file is the obvious default, but write it down rather than
-  leaving it implicit).
+  and markdown files is the obvious default, but write it down rather
+  than leaving it implicit).
 - Reads the day's LangSmith traces (Phase 5) and runs **two separate
   calibration passes**:
   1. **Admission table** — statistical: group completed tasks by
@@ -408,16 +437,13 @@ earlier "Planner as a separate layer" framing:**
      assigned, adjust that class's bucket. Small table, easy to version
      and validate against a held-out slice before it replaces the live
      one.
-  2. **Planning skill file** — for each task, compares that task's own
-     worker-private Planner prediction to what actually happened, and
-     rewrites the skill file every worker's Planner reads, to correct
-     systematic in-flight misestimation. This one edits an instructions
-     document, not a table, so it has no equivalent natural regularization
-     — worth applying the same held-out-validation-before-swap discipline
-     here too, even though the mechanism is fuzzier.
+  2. **`llm_caller.md` / `tool_caller.md`** — for each task, compares the
+     worker's own in-flight `LLMCaller` prediction to what actually
+     happened, and rewrites whichever markdown file every worker reads,
+     to correct systematic in-flight misestimation.
 - Also runs the LLM-as-judge scoring pass used in Phase 6.
 - Depends on Phase 5 existing (needs real predicted-vs-actual trace data
   for both passes) and on Phase 3's admission-table/SJF machinery and
-  Phase 1's Planner existing to produce predictions worth calibrating in
-  the first place — so this phase's own code can start early, but it has
-  nothing to plug into until then.
+  Phase 1's `LLMCaller` existing to produce predictions worth calibrating
+  in the first place — so this phase's own code can start early, but it
+  has nothing to plug into until then.
