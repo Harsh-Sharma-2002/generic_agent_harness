@@ -64,16 +64,16 @@ Text2SQL Agent each keep private state, "one private pass"). So:
   (e.g. "web-search-heavy," "long-computation," "multi-tool-chain" —
   mirrors your own short-search-vs-long-math example directly), **with
   expected step count as a secondary feature**, so the table has two axes
-  to calibrate against, not one. **Cold start (day zero, before Phase 7
-  has ever run): every class maps to the same single bucket**, i.e. plain
-  FIFO with no real SJF advantage yet. Deliberately honest about having
-  zero information rather than guessing — and it means Phase 6 can
-  measure "how many days of calibration until SJF actually beats FIFO,"
-  a result worth having on its own, not just a bootstrapping detail. This
-  stays exactly as designed regardless of the `LLMCaller`/`ToolCaller`
-  simplification — it was never an LLM-driven artifact, and shouldn't
-  become one, since that would reintroduce the cost/latency/privacy
-  problem it was built to avoid.
+  to calibrate against, not one. **Cold start (day zero, before the
+  offline job has ever run): every class maps to the same single
+  bucket**, i.e. plain FIFO with no real SJF advantage yet. Deliberately
+  honest about having zero information rather than guessing — and it
+  means the evaluation phase can measure "how many days of calibration
+  until SJF actually beats FIFO," a result worth having on its own, not
+  just a bootstrapping detail. This stays exactly as designed regardless
+  of the `LLMCaller`/`ToolCaller` simplification — it was never an
+  LLM-driven artifact, and shouldn't become one, since that would
+  reintroduce the cost/latency/privacy problem it was built to avoid.
 - **`LLMCaller`'s in-flight behavior (private, inside the Worker):**
   handles per-task step decomposition and in-flight re-estimation, with
   full access to task content, because it lives inside the worker
@@ -141,7 +141,7 @@ Orchestrator above the scheduler too:
     the live request path; it does two things once a day, then the job
     ends:
     1. Acts as **LLM-as-judge** over a sample of the day's completed
-       tasks (Phase 6), scoring output quality with a stronger model than
+       tasks (Phase 7), scoring output quality with a stronger model than
        whatever's answering live requests, so the judge isn't grading its
        own homework.
     2. Recalibrates **both** learning artifacts (see Scheduling policy
@@ -174,8 +174,8 @@ Orchestrator above the scheduler too:
      per-`task_class`, not a fixed global ratio** (e.g. 1.5-2x): a short
      task naturally has much noisier relative timing than a long one, so
      one constant can't be right for both. This threshold is calibrated
-     by the same Phase 7 statistical pass that calibrates the admission
-     table, not a hand-picked number.
+     by the same statistical pass that calibrates the admission table,
+     not a hand-picked number.
   **`MAX_REPLAN_ATTEMPTS` bounds repeated failures**, so a task whose
   steps keep failing (bad tool, genuinely unsolvable step) can't loop
   fail→retry→fail→re-plan indefinitely and hog a worker forever — the
@@ -232,27 +232,52 @@ Orchestrator above the scheduler too:
      not a table, so it has no equivalent natural regularization — apply
      the same held-out-validation-before-swap discipline here too, even
      though the mechanism is fuzzier.
-  Also still runs the Phase 6 LLM-as-judge output-quality scoring, a
-  third, separate pass, even though all three run in the same daily Sol
-  session.
+  Also still runs the LLM-as-judge output-quality scoring, a third,
+  separate pass, even though all three run in the same daily Sol session.
 - **Observability:** LangSmith tracing on every scheduling event and every
   worker LLM call (reusing the pattern already proven in Agent Harness),
-  both to power the Phase 5 dashboards and as the raw data the offline
-  Sol job reads for both calibration passes and LLM-as-judge scoring.
+  both to power the observability phase's dashboards and as the raw data
+  the offline job reads for both calibration passes and LLM-as-judge
+  scoring.
 - **Stack:** Python, asyncio.
-- **Task source:** synthetic benchmark tasks that we author, so Phase 6's
-  evaluation is controlled and repeatable.
-- **Task submission:** HTTP API, not an in-process Python call. Chosen
-  deliberately over the simpler option because the goal is to keep this
-  close to how it would run in production, and because a future
-  containerized deployment would end up talking HTTP anyway, so building
-  that boundary in from Phase 1 avoids a rewrite later. **Framework
-  pick (not yet confirmed by you): FastAPI** — async-native, matches the
-  asyncio stack, and the pool of currently-live workers can be exposed as
-  live state on the same app rather than a second service. **The response
-  contract for `POST /tasks` (task ID + separate status/result lookup vs.
-  something else) is explicitly deferred by you** — noted here so it
-  doesn't get silently decided by default when Phase 1 gets built.
+- **Task source:** synthetic benchmark tasks that we author, so the
+  evaluation phase is controlled and repeatable.
+- **Task submission:** HTTP API in Phase 1 (placeholder), superseded by
+  A2A in Phase 2 — see Phase 2 for why. Chosen deliberately over an
+  in-process call because the goal is to keep this close to how it would
+  run in production.
+- **Security & observability layer** (FastAPI middleware on the existing
+  `api/` layer, not a new named architectural layer — applies from
+  Phase 1 onward, to whichever protocol is fronting the system at the
+  time):
+  - **Auth: per-user API keys, multi-tenant.** Each user has their own
+    key; keys are **hashed, never stored raw** (this repo is public — a
+    DB leak of hashes is not a leak of usable keys). Storage: **SQLite**,
+    matching the pattern already used in `cold_email`/`job_search`, the
+    simplest fit for a single-machine research prototype.
+  - **Per-user rate limiting:** caps requests/time from a single key,
+    independent of the Orchestrator's own backlog-driven scaling. Note
+    this only addresses one user flooding the system — the "no
+    backpressure under aggregate load from many well-behaved users" gap
+    (flagged earlier) is separate and still open.
+  - **Audit logging:** every request logged with who (key/user id), what
+    (`task_class` only, never task content — same privacy principle as
+    the rest of the design), when, and outcome
+    (admitted/rejected/rate-limited). Feeds the same LangSmith pipeline
+    already built for scheduling events, not a second system.
+  - **Input validation:** malformed/oversized task payloads rejected
+    before reaching admission logic.
+  - **`user.md`:** a per-user markdown file that personalizes the
+    `LLMCaller`'s behavior for that user's tasks, loaded alongside
+    `llm_caller.md`. **Starts as user-authored/static, not
+    offline-calibrated** — calibrating one file per user would grow the
+    offline job's scope meaningfully and only matters once there's more
+    than one real user. Noted as explicit future scope, not built now.
+  - **Explicitly deferred:** fairness across users *within* the worker
+    pool once tasks are admitted (rate limiting only governs submission
+    rate, not whether one user's admitted tasks crowd out another's SJF
+    slots) — matters only with multiple real concurrent users, which
+    isn't the near-term reality.
 - **Orchestrator scaling policy:** driven by backlog, not by error/latency
   signals. Reasoning given: once the system is already resource-saturated,
   launching more workers doesn't help, so error rate isn't a useful
@@ -260,7 +285,7 @@ Orchestrator above the scheduler too:
   simpler to just set directly. Concretely: active worker coroutines track
   the number of pending requests, up to a **configured max concurrency**
   (a number reflecting known/assumed gateway capacity, not yet picked —
-  see open item in Phase 4), and scale back down as workers finish and
+  see open item in Phase 5), and scale back down as workers finish and
   the queue empties.
 - **Scaled instance = asyncio coroutine** within one process (not a
   separate OS process or node).
@@ -272,8 +297,9 @@ Orchestrator above the scheduler too:
 
 - Repo layout: `worker/` (contains `LLMCaller`, `ToolCaller`, and a
   `skills/` subfolder holding `llm_caller.md` and `tool_caller.md`),
-  `scheduler/`, `observability/`, `tasks/`, `api/` (the HTTP submission
-  layer).
+  `scheduler/`, `observability/`, `tasks/`, `api/` (the HTTP/A2A
+  submission layer), `security/` (auth middleware, the `User`/`ApiKey`
+  SQLite store, rate limiting, audit logging).
 - Define the core abstractions as plain data classes before writing any
   scheduling logic: `Task` (carries a `task_class` label — tool profile
   as primary key, expected step count as a secondary feature), `Worker`
@@ -281,33 +307,35 @@ Orchestrator above the scheduler too:
   `LLMCaller` and a `ToolCaller`), `Quantum` (a work-based step boundary
   — one `LLMCaller` invocation plus its `ToolCaller` call(s), not a
   constant), `Queue`, `SchedulerEvent`, `NodeSkill` (a small versioned
-  wrapper around a markdown file — both `llm_caller.md` and
-  `tool_caller.md` use this, so the held-out-validation-before-swap
+  wrapper around a markdown file — `llm_caller.md`, `tool_caller.md`,
+  and `user.md` all use this, so the held-out-validation-before-swap
   discipline applies uniformly), `AdmissionTable` (the shared
   `task_class → time bucket` lookup, offline-job-rewritten statistically,
-  never via LLM). `MAX_REPLAN_ATTEMPTS` is a constant here too, from day
-  one — not something to bolt on after hitting the retry-loop bug for
-  real.
+  never via LLM), `User`/`ApiKey` (hashed-key storage). `MAX_REPLAN_ATTEMPTS`
+  is a constant here too, from day one — not something to bolt on after
+  hitting the retry-loop bug for real.
 - No scheduling behavior yet. This phase just fixes vocabulary so Phase 1+
   isn't renaming things halfway through.
 
 ## Phase 1 — One worker, one task, checkpointable
 
-- A minimal HTTP endpoint (`POST /tasks`) accepts the one task, since
-  that's the standing decision for how tasks enter the system (response
-  contract still deferred, see Decisions — a placeholder response is fine
-  for this phase). The task carries a `task_class` label, authored in
+- A minimal HTTP endpoint (`POST /tasks`) accepts the one task — a
+  deliberate placeholder, since Phase 2 replaces it with A2A. The
+  security middleware (API key auth, rate limiting, audit logging, input
+  validation) wraps this endpoint from day one rather than being
+  retrofitted later. The task carries a `task_class` label, authored in
   directly since tasks are synthetic (Task source decision).
 - Get a single Claude-like worker (a first concrete subclass of the
   `BaseWorker` template, built from an `LLMCaller` and a `ToolCaller`) to
   run that task end-to-end. The `LLMCaller`'s first invocation for a task
   decides step boundaries and produces an in-flight estimate, using
   seed/placeholder `llm_caller.md` and `tool_caller.md` files (there's no
-  calibration history yet, since that only exists after Phase 5+7 run at
-  least once). Doing this now rather than bolting it on later means the
-  estimate-vs-actual data Phase 7 needs is already flowing before
-  anything depends on it. No admission table needed yet — that only
-  matters once there's more than one task to rank (Phase 3).
+  calibration history yet, since that only exists after the observability
+  and offline-loop phases run at least once). Doing this now rather than
+  bolting it on later means the estimate-vs-actual data those later
+  phases need is already flowing before anything depends on it. No
+  admission table needed yet — that only matters once there's more than
+  one task to rank (Phase 4).
 - Prove the worker's state can be serialized at a step boundary, the
   worker process stopped, and the task resumed later from that serialized
   state with no lost progress. This is the load-bearing primitive: if a
@@ -316,7 +344,39 @@ Orchestrator above the scheduler too:
 - No queues, no priority, no concurrency, no orchestrator yet. Just:
   submit over HTTP, plan, run, pause at a step boundary, resume, finish.
 
-## Phase 2 — Single queue, round robin, real preemption
+## Phase 2 — A2A protocol integration
+
+- Replaces Phase 1's placeholder `POST /tasks` with a proper
+  [A2A-protocol](https://a2a-protocol.org/latest/specification/)-compliant
+  interface (v1.0, Linux Foundation): an Agent Card served at
+  `/.well-known/agent.json` (declaring supported `task_class`es and an
+  auth scheme), JSON-RPC 2.0 over HTTPS as the transport, and tasks
+  following A2A's own lifecycle (`submitted → working → input-required →
+  completed/canceled/failed`) mapped onto this project's task states.
+- **This is what actually resolves the response-contract question left
+  open in Decisions**, rather than needing a bespoke task-ID-plus-polling
+  design: A2A already defines how a client gets a result back for a
+  long-running, unpredictable-duration task — synchronously, over
+  Server-Sent Events, or via a callback URL.
+- **Auth, unified rather than duplicated:** A2A's Agent Card declares an
+  auth scheme; this uses the same per-user API-key system from Decisions
+  as that scheme, instead of building a second auth mechanism just for
+  A2A.
+- Still runs against the exact single-worker-single-task system proven in
+  Phase 1 — no queues, priority, or orchestrator yet. Validates the
+  protocol implementation against the simplest possible backend before
+  scheduling complexity gets layered on top starting Phase 3, so a bug
+  is either "the protocol layer" or "the core primitive," never both at
+  once.
+- Explicitly sequenced here — after the core checkpoint/resume primitive
+  is proven, before MLFQ/orchestrator complexity exists — rather than
+  either before Phase 1 (nothing to validate it against yet) or after the
+  full scheduler (debugging protocol compliance and scheduling logic
+  simultaneously). This phase exists primarily as a learning goal
+  alongside the paper's critical path, not because the paper's scheduling
+  claims depend on it — worth keeping in mind if time gets tight later.
+
+## Phase 3 — Single queue, round robin, real preemption
 
 - Multiple tasks, one worker, one FIFO queue. No SJF yet (a single FIFO
   queue has nothing to order by), no admission table needed — purely
@@ -329,7 +389,7 @@ Orchestrator above the scheduler too:
   instead of a concept on paper. Get this loop rock solid before adding
   priority.
 
-## Phase 3 — Multi-level feedback queues (SJF + FIFO hybrid)
+## Phase 4 — Multi-level feedback queues (SJF + FIFO hybrid)
 
 - 4 priority queues. Levels 1-3 order tasks by SJF; level 4 is plain
   FIFO. The SJF value starts as an admission-table lookup
@@ -344,12 +404,12 @@ Orchestrator above the scheduler too:
 - **Demotion/promotion rule still needs deciding (proposed, not
   confirmed):** demote a task to the next level down when its actual
   runtime significantly exceeds its current estimate — the same
-  over/under-estimate signal Phase 7's offline calibration passes use, so
+  over/under-estimate signal the offline job's calibration passes use, so
   demotion and calibration would both read from one source of truth
   instead of two. Aging/promotion at level 4 still needs its own rule so
   a task that keeps blowing its estimates doesn't starve forever.
 
-## Phase 4 — Orchestrator: elastic worker pool
+## Phase 5 — Orchestrator: elastic worker pool
 
 - A real worker pool, not a simulated one, but the pool size is no longer
   fixed. The Orchestrator layer scales the number of live worker
@@ -384,23 +444,23 @@ Orchestrator above the scheduler too:
   running low-priority task early, or just wait for the next free/drained
   worker like everything else?
 
-## Phase 5 — Observability
+## Phase 6 — Observability
 
 - Every scheduling decision emits a structured event: enqueue, dequeue,
   step start/end, preemption, demotion, promotion, starvation-aging
   trigger, retry, re-plan, and `MAX_REPLAN_ATTEMPTS` failure — a task
   that fails outright needs to be as visible in the traces as one that
-  succeeds, or Phase 6's results silently exclude exactly the tasks most
-  likely to reveal scheduling problems.
+  succeeds, or the evaluation phase's results silently exclude exactly
+  the tasks most likely to reveal scheduling problems.
 - Track per-task metrics: total wait time, number of preemptions, queue
   level over time, turnaround time, **the task's `task_class` and its
   admission-table bucket, and the worker's `LLMCaller` predicted runtime,
-  alongside the actually-observed runtime** — Phase 7 can't run either
-  calibration pass without all of these on the same task.
+  alongside the actually-observed runtime** — the offline job can't run
+  either calibration pass without all of these on the same task.
 - Export these as LangSmith traces, both for the live scheduler dashboard
-  and as the dataset the Phase 7 offline job reads.
+  and as the dataset the offline job (Phase 8) reads.
 
-## Phase 6 — Evaluation (the research-paper payoff)
+## Phase 7 — Evaluation (the research-paper payoff)
 
 - **Baseline, precisely defined:** the identical system (same Worker,
   same `LLMCaller`/`ToolCaller`, same step mechanism) with the scheduler
@@ -419,7 +479,7 @@ Orchestrator above the scheduler too:
   mix used for benchmarking should be decided and written down before
   running it, not chosen after seeing which results look best.
 
-## Phase 7 — Offline daily learning loop (Sol)
+## Phase 8 — Offline daily learning loop (Sol)
 
 - A Slurm batch job on Sol, run once a day, hosting Qwen2.5-72B-Instruct
   via vLLM (`4×80G A100s`, per
@@ -430,7 +490,7 @@ Orchestrator above the scheduler too:
   run doesn't complete in time (keep using yesterday's admission table
   and markdown files is the obvious default, but write it down rather
   than leaving it implicit).
-- Reads the day's LangSmith traces (Phase 5) and runs **two separate
+- Reads the day's LangSmith traces (Phase 6) and runs **two separate
   calibration passes**:
   1. **Admission table** — statistical: group completed tasks by
      `task_class`, compare actual runtime to the bucket each was
@@ -440,10 +500,11 @@ Orchestrator above the scheduler too:
   2. **`llm_caller.md` / `tool_caller.md`** — for each task, compares the
      worker's own in-flight `LLMCaller` prediction to what actually
      happened, and rewrites whichever markdown file every worker reads,
-     to correct systematic in-flight misestimation.
-- Also runs the LLM-as-judge scoring pass used in Phase 6.
-- Depends on Phase 5 existing (needs real predicted-vs-actual trace data
-  for both passes) and on Phase 3's admission-table/SJF machinery and
+     to correct systematic in-flight misestimation. (`user.md` is
+     explicitly excluded from this pass for now — see Decisions.)
+- Also runs the LLM-as-judge scoring pass used in Phase 7.
+- Depends on Phase 6 existing (needs real predicted-vs-actual trace data
+  for both passes) and on Phase 4's admission-table/SJF machinery and
   Phase 1's `LLMCaller` existing to produce predictions worth calibrating
   in the first place — so this phase's own code can start early, but it
   has nothing to plug into until then.
