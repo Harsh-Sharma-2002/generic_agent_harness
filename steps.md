@@ -144,15 +144,31 @@ earlier "Planner as a separate layer" framing:**
      sign the plan itself is wrong); only trigger a full re-plan if it
      fails a second time in a row.
   2. A step's actual duration significantly overruns its allocated share
-     of the original estimate (e.g. >1.5-2x) — trigger a re-plan
-     immediately, no retry, since this is a direct signal the original
-     estimate was wrong rather than a transient failure.
-  **The retry-once-before-replanning rule and the specific overrun
-  threshold are my proposal filling in your two triggers, not something
-  you specified precisely — flag if you want different numbers or logic.**
+     of the original estimate — trigger a re-plan immediately, no retry,
+     since this is a direct signal the original estimate was wrong rather
+     than a transient failure. **The overrun threshold is per-`task_class`,
+     not a fixed global ratio** (e.g. 1.5-2x): a short task naturally has
+     much noisier relative timing than a long one, so one constant can't
+     be right for both. This threshold is calibrated by the same Phase 7
+     statistical pass that calibrates the admission table, not a
+     hand-picked number.
+  **Corrected after review — a real gap in the first version of this
+  rule:** there was no cap on repeated failures. A task whose steps keep
+  failing (bad tool, genuinely unsolvable step) could loop
+  fail→retry→fail→re-plan indefinitely, hogging a worker forever — the
+  same bug class already found for real in Agent Harness's `decisions.py`
+  (the discovery loop caps itself at `MAX_DISCOVERY_ITERATIONS = 4`, the
+  SQL retry loop doesn't cap at all). **`MAX_REPLAN_ATTEMPTS`** bounds
+  this: once exceeded, the task fails outright instead of continuing to
+  loop.
   This keeps the common case (task goes according to plan) to a single
   LLM call, and only pays for more when the plan has actually been
-  falsified by something observed.
+  falsified by something observed. **Still open:** whether to distinguish
+  transient failures (timeout, rate limit — retry is worth it) from
+  deterministic ones (malformed query, wrong argument shape — retrying
+  the identical step will fail identically, so the retry is pure waste).
+  Real refinement, adds complexity (requires classifying *why* a step
+  failed), not yet decided whether it's worth it.
 - **Reporting to the scheduler:** after every step (whether or not that
   step triggered a re-plan), the worker reports its current best
   remaining-time estimate as a plain number. If no re-plan happened, this
@@ -241,7 +257,8 @@ earlier "Planner as a separate layer" framing:**
   `SchedulerEvent`, `PlanningSkill` (the worker-private skill-file the
   offline job rewrites), `AdmissionTable` (the shared `task_class → time
   bucket` lookup, also offline-job-rewritten but statistically, not via
-  LLM).
+  LLM). `MAX_REPLAN_ATTEMPTS` is a constant here too, from day one — not
+  something to bolt on after hitting the retry-loop bug for real.
 - No scheduling behavior yet. This phase just fixes vocabulary so Phase 1+
   isn't renaming things halfway through.
 
@@ -342,7 +359,10 @@ earlier "Planner as a separate layer" framing:**
 
 - Every scheduling decision emits a structured event: enqueue, dequeue,
   step start/end, preemption, demotion, promotion, starvation-aging
-  trigger.
+  trigger, retry, re-plan, and `MAX_REPLAN_ATTEMPTS` failure — a task
+  that fails outright needs to be as visible in the traces as one that
+  succeeds, or Phase 6's results silently exclude exactly the tasks most
+  likely to reveal scheduling problems.
 - Track per-task metrics: total wait time, number of preemptions, queue
   level over time, turnaround time, **the task's `task_class` and its
   admission-table bucket, and the worker's private Planner's predicted
