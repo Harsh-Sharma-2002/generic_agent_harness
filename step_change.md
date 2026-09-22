@@ -1,35 +1,3 @@
-# KernelAI — Revised Build Order
-
-> **Purpose:** This file changes only the **implementation order** of KernelAI.
->
-> `steps.md` remains the source of truth for the final architecture, scheduling design, research decisions, evaluation plan, and other technical details.
->
-> Do **not** remove or reinterpret features from `steps.md` based on this file. This file only changes **when** they are built.
-
----
-
-## Why the Build Order Is Changing
-
-The existing plan moves relatively quickly toward the final scheduling architecture.
-
-Instead, development will proceed through **working vertical slices**.
-
-The principle is:
-
-> Build the simplest working generic agent harness first. Then introduce concurrency, queueing, checkpointing, scheduling, preemption, and elasticity one layer at a time.
-
-Every stage should produce a runnable system.
-
-This makes it easier to:
-
-* understand each component before adding the next,
-* debug failures,
-* measure the effect of individual architectural changes,
-* avoid designing abstractions for behaviowe have not implemented yet,
-* maintain a working product throughout development.
-
----
-
 # Stage 0 — Single Generic Agent Harness
 
 ## Goal
@@ -47,36 +15,289 @@ GenericWorker
  │
  ├── LLMCaller
  ├── ToolCaller
- └── Agent State
+ └── Conversation History
  │
  ▼
 Result
 ```
 
+The worker accepts:
+
+```text
+query
+request_id
+```
+
+and returns:
+
+```text
+dict[str, Any]
+```
+
+The returned dictionary is intentionally generic so different kinds of tasks can return different result structures.
+
 The worker should accept an arbitrary task and execute a normal agent loop:
 
 ```text
-Task
- ↓
-LLM
- ↓
-Tool request?
- ├── No ──► Final answer
- │
- └── Yes
-      ↓
-   ToolCaller
-      ↓
-   Tool result
-      ↓
-     LLM
-      ↓
-     ...
+query
+  │
+  ▼
+messages
+  │
+  ▼
+ LLMCaller
+  │
+  ├──── final response ──────────► Result
+  │
+  └──── tool request
+            │
+            ▼
+        ToolCaller
+            │
+            ▼
+        tool result
+            │
+            ▼
+   append result to messages
+            │
+            └────────────────────► LLMCaller
 ```
 
 The same `GenericWorker` implementation must be usable for different types of tasks.
 
-### Explicitly NOT part of Stage 0
+---
+
+## Worker Contract
+
+Stage 0 begins with a deliberately small worker interface:
+
+```python
+async def run(
+    query: str,
+    request_id: str,
+) -> dict[str, Any]:
+    ...
+```
+
+The worker does **not** receive scheduling or orchestration metadata.
+
+Things such as:
+
+```text
+task_class
+priority
+queue level
+runtime estimate
+worker assignment
+arrival time
+wait time
+preemption count
+```
+
+belong to the future runtime/orchestrator execution records, not to the generic worker's task interface.
+
+The worker should not know why or how it was selected to execute a request.
+
+---
+
+## Worker State
+
+Stage 0 does **not** introduce a separate `WorkerState`, planner-state schema, task-state schema, or dynamically generated Python state fields.
+
+The worker's primary task state is its **conversation history**.
+
+For example:
+
+```text
+messages
+│
+├── user query
+├── assistant reasoning/action
+├── tool request
+├── tool result
+├── assistant reasoning/action
+├── tool request
+├── tool result
+└── ...
+```
+
+Tool results are appended to the conversation and supplied back to the model on the next LLM invocation.
+
+This allows the model to reason about arbitrary task-specific concepts without KernelAI defining Python fields for every possible task.
+
+For example, KernelAI does **not** define fields such as:
+
+```text
+needs_discovery
+current_route
+research_stage
+files_remaining
+tests_required
+needs_validation
+```
+
+If a task requires reasoning about these concepts, the model handles them through its context and interaction history.
+
+This keeps the worker genuinely generic.
+
+---
+
+## Minimal Runtime Bookkeeping
+
+A small amount of non-conversation state is allowed when required by the harness itself.
+
+Initially this should be limited to things such as:
+
+```text
+request_id
+iteration/tool-call count
+```
+
+`request_id` exists for correlation and logging.
+
+An iteration/tool-call counter exists only to prevent an agent from entering an infinite execution loop.
+
+These are **runtime bookkeeping**, not task reasoning state.
+
+---
+
+## Planning
+
+Stage 0 does not contain a dedicated `Planner` component or explicit planner-owned state.
+
+Planning is behavior performed by the model inside the normal agent loop.
+
+For example:
+
+```text
+User:
+Research X, compare A and B, and produce a report.
+
+                 │
+                 ▼
+
+               Model
+                 │
+        internally determines
+                 │
+       ┌─────────┼─────────┐
+       ▼         ▼         ▼
+     search    inspect   compare
+       │         │         │
+       └─────────┴─────────┘
+                 │
+                 ▼
+              answer
+```
+
+KernelAI does not need to represent that plan as Python state unless later stages demonstrate a concrete need for it.
+
+A dedicated planning representation may be introduced later if required for checkpointing, preemption, observability, or improved execution quality.
+
+Do not design it during Stage 0.
+
+---
+
+## LLMCaller
+
+`LLMCaller` is responsible only for communication with the configured model backend.
+
+Initially the backend is the ASU Research Computing OpenAI-compatible gateway.
+
+Conceptually:
+
+```text
+GenericWorker
+      │
+      │ messages + available tools
+      ▼
+   LLMCaller
+      │
+      ▼
+  LLM Provider
+      │
+      ▼
+ model response
+```
+
+`LLMCaller` must not know about:
+
+```text
+scheduling
+MLFQ
+priorities
+orchestrator state
+task classes
+worker pools
+preemption
+```
+
+It is simply the model interface.
+
+---
+
+## ToolCaller
+
+`ToolCaller` executes tool requests produced by the model.
+
+```text
+Model
+  │
+  │ tool request
+  ▼
+ToolCaller
+  │
+  ▼
+registered tool
+  │
+  ▼
+tool result
+  │
+  ▼
+conversation history
+```
+
+The initial tool set should remain small.
+
+The objective of Stage 0 is to validate the generic execution loop, not to build a large tool ecosystem.
+
+---
+
+## Execution Safety
+
+The agent loop must have a hard execution limit.
+
+For example:
+
+```text
+MAX_ITERATIONS
+```
+
+This prevents:
+
+```text
+LLM
+ ↓
+Tool
+ ↓
+LLM
+ ↓
+Tool
+ ↓
+LLM
+ ↓
+Tool
+ ↓
+...
+```
+
+from continuing indefinitely.
+
+Reaching the limit should terminate the request cleanly rather than leaving the worker stuck.
+
+---
+
+## Explicitly NOT Part of Stage 0
 
 Do not implement:
 
@@ -92,325 +313,77 @@ Do not implement:
 * Offline learning
 * Security
 * LangSmith scheduling instrumentation
+* Dedicated Planner component
+* Planner state
+* Task-specific state schemas
+* Runtime estimation
+* Priority metadata
 
 The objective is only to prove:
 
-> **One generic worker can reliably execute arbitrary agent tasks using an LLM and tools.**
-
-### Stage 0 is complete when
-
-A terminal user can submit several different kinds of tasks and the same generic worker can reason, call tools when necessary, consume tool results, continue execution, and return a final answer.
+> **One generic worker can reliably execute arbitrary agent tasks using an LLM, conversation context, and tools.**
 
 ---
 
-# Stage 1 — Multiple Generic Workers
+## Stage 0 Implementation Order
 
-## Goal
-
-Run multiple independent instances of the Stage 0 worker concurrently.
+Build Stage 0 in this order:
 
 ```text
-                 Harness
-                    │
-        ┌───────────┼───────────┐
-        ▼           ▼           ▼
-     Worker 1    Worker 2    Worker 3
-        │           │           │
-      Task A      Task B      Task C
+1. BaseWorker contract
+        │
+        ▼
+2. LLMCaller
+        │
+        ▼
+3. Verify direct asynchronous LLM call
+        │
+        ▼
+4. Tool interface
+        │
+        ▼
+5. ToolCaller / tool registry
+        │
+        ▼
+6. One or two simple tools
+        │
+        ▼
+7. GenericWorker agent loop
+        │
+        ▼
+8. Test direct-answer task
+        │
+        ▼
+9. Test tool-using task
+        │
+        ▼
+10. CLI
+        │
+        ▼
+11. Test unrelated task types
 ```
 
-Use lightweight `asyncio` concurrency initially.
-
-There is still **no scheduler**.
-
-Tasks can initially be directly assigned to workers.
-
-The purpose of this stage is to prove that:
-
-* workers are genuinely generic,
-* worker state is isolated,
-* several agent loops can execute concurrently,
-* one worker failing does not corrupt another.
+Do not move to Stage 1 until this loop works reliably.
 
 ---
 
-# Stage 2 — Resource and Concurrency Investigation
-
-## Goal
-
-Before designing elastic scaling, determine what resources are actually available and what limits worker concurrency.
-
-Inspect the execution environment from the terminal.
-
-Check things such as:
-
-```text
-Cd include:
-
-```bash
-uname -a
-lscpu
-nproc
-free -h
-ulimit -a
-nvidia-smi
-```
-
-Also distinguish between **local worker resources** and **remote inference resources**.
-
-When using the ASU-hosted LLM:
-
-```text
-GenericWorker
-      │
-      │ network request
-      ▼
-ASU LLM Gateway
-      │
-      ▼
-Hosted Model
-```
-
-LLM inference is remote.
-
-Therefore local GPU capacity may not determine how many generic workers can exist. Workers may primarily be lightweight asynchronous tasks waiting on network and tool I/O.
-
-The practical limits may instead be:
-
-* remote API concurrency,
-* rate limits,
-* network latency,
-* local memory,
-* CPU-heavy tools,
-* other external services.
-
-Do not aggressively load-test the shared ASU gateway.
-
-Start with conservative concurrency and increase only through normal project workloads.
-
-The result of this stage should inform later orchestrator design.
-
----
-
-# Stage 3 — Simple FIFO Worker Pool
-
-## Goal
-
-Introduce scheduling in the simplest possible form.
-
-```text
-Incoming Tasks
-      │
-      ▼
-┌──────────────┐
-│  FIFO Queue  │
-└──────┬───────┘
-       │
-   ┌───┼───┐
-   ▼   ▼   ▼
-  W1  W2  W3
-```
-
-If every worker is busy, incoming tasks wait.
-
-When a worker becomes available, it receives the oldest waiting task.
-
-There is still:
-
-* no priority,
-* no MLFQ,
-* no preemption,
-* no SJF/SRTF.
-
-This becomes the simple scheduling baseline for later comparison.
-
----
-
-# Stage 4 — Work Quanta + Checkpoint/Resume
-
-## Goal
-
-Change worker execution from:
-
-```text
-run entire task
-```
-
-to:
-
-```text
-run one safe unit of work
-```
-
-Introduce the work-based quantum defined in `steps.md`.
-
-The important distinction remains:
-
-> **A quantum is a unit of work, not a duration of wall-clock time.**
-
-After completing a quantum, task execution must be safely checkpointable.
-
-Required  ...
-
-new worker
- │
- ▼
-restore checkpoint
- │
- ├── Quantum 3 ✓
- └── continue
-```
-
-Previously completed work must not be repeated.
-
-This stage establishes the primitive required for actual preemption.
-
----
-
-# Stage 5 — Preemptive Scheduler
-
-## Goal
-
-Replace the simple FIFO scheduler with the scheduling architecture defined in `steps.md`.
-
-This is where we introduce:
-
-* multi-level feedback queues,
-* SJF/SRTF ordering,
-* work-boundary preemption,
-* demotion,
-* promotion,
-* aging,
-* starvation prevention,
-* runtime estimation.
-
-Example:
-
-```text
-Long Task running
-remaining estimate = 30
-
-        ↓
-
-Short Task arrives
-estimate = 4
-
-        ↓
-
-Long Task finishes current work quantum
-
-        ↓
-
-checkpoint Long Task
-
-        ↓
-
-run Short Task
-
-        ↓
-
-Short Task finishes
-
-        ↓
-
-resume Long Task
-```
-
-Preemption happens at **safe work boundaries**, not arbitrary time boundaries.
-
-The detailed scheduling policy remains defined by `steps.md`.
-
----
-
-# Stage 6 — Elastic Orchestrator
-
-## Goal
-
-Only after the scheduler and workers function correctly do we introduce the final orchestrator.
-
-Keep the responsibilities separate:
-
-```text
-ORCHESTRATOR
-How many workers should exist?
-
-SCHEDULER
-Which task should run next?
-```
-
-Architecture:
-
-```text
-                 Orchestrator
-                     │
-              worker pool size
-                     │
-         ┌───────────┼───────────┐
-         ▼           ▼           ▼
-       Worker      Worker      Worker
-         ▲           ▲           ▲
-         └───────────┼───────────┘
-                     │
-                 Scheduler
-                     │
-                   Tasks
-```
-
-The resource investigation from Stage 2 should guide the orchestrator's concurrency limits and scaling behavior.
-
-The orchestrator can then scale the generic worker pool according to backlog and available capacity.
-
----
-
-# After Stage 6
-
-Once the complete runtime works, continue with the remaining major systems already specified in `steps.md`, including:
-
-```text
-Observability
-      ↓
-Offline learning/calibration
-      ↓
-Evaluation
-      ↓
-Security / production hardening
-```
-
-Their detailed designs remain in `steps.md`.
-
----
-
-# Development Rule
-
-At any point, work only on the **current stage** unless a small piece of a future stage is strictly necessary for the current one.
-
-In particular:
-
-```text
-Stage 0 → Do not design MLFQ.
-Stage 1 → Do not design preemption.
-Stage 2 → Measure before designing elasticit elasticity only after there is a working scheduler to orchestrate.
-```
-
-The target progression is therefore:
-
-```text
-Working Agent
-     ↓
-Concurrent Agents
-     ↓
-Understand Resources
-     ↓
-FIFO Runtime
-     ↓
-Checkpointable Runtime
-     ↓
-Preemptive Scheduled Runtime
-     ↓
-Elastic Runtime
-```
-
-`steps.md` defines **what KernelAI ultimately becomes**.
-
-`BUILD_ORDER.md` defines **the order in which we get there**.
-
+## Stage 0 Definition of Done
+
+Stage 0 is complete when a terminal user can submit several substantially different kinds of tasks and:
+
+1. The same `GenericWorker` implementation handles all of them.
+2. The worker receives only `query` and `request_id`.
+3. The worker calls the LLM asynchronously.
+4. The model can answer directly when no tool is required.
+5. The model can request registered tools.
+6. `ToolCaller` executes those tools.
+7. Tool results are appended to conversation history.
+8. The model can continue execution using those results.
+9. Multiple LLM/tool iterations can occur when necessary.
+10. The worker eventually returns `dict[str, Any]`.
+11. Execution is bounded by a safety limit.
+12. No task-specific Python state schema is required.
+
+At this point KernelAI has a functioning **generic agent harness**.
+
+Only then move to Stage 1 and run multiple independent instances of this worker concurrently.
