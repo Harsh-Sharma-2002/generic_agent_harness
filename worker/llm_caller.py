@@ -8,6 +8,10 @@ import os
 from typing import Any
 from dotenv import load_dotenv
 from  openai import AsyncOpenAI
+from openai.types.chat import (
+    ChatCompletionMessage,
+    ChatCompletionMessageParam,
+)
 
 load_dotenv()
 
@@ -17,8 +21,8 @@ class LLMCaller:
     """
     def __init__(self) -> None:
         api_key = os.environ.get("ASU_LLM_API_KEY")
-        base_url = os.environ.get("=https://openai.rc.asu.edu/v1")
-        model = os.environ.get("glm-5-3-flash")
+        base_url = os.environ.get("ASU_LLM_BASE_URL")
+        model = os.environ.get("ASU_LLM_MODEL")
 
         missing  = [name for name, value in {
                 "ASU_LLM_API_KEY": api_key,
@@ -33,9 +37,10 @@ class LLMCaller:
         self.model = model
         self.client  = AsyncOpenAI(api_key=api_key,base_url=base_url)
 
-    async def call(self,messages:list(dict[str,Any]), 
-                    tools: list(dict[str,Any]),
-                    max_tokens: int = 2048) -> Any:
+    async def call(self,
+                    messages: list[ChatCompletionMessageParam], 
+                    tools: list[dict[str,Any]] | None = None,
+                    max_tokens: int = 2048) -> ChatCompletionMessage:
                     kwargs: dict[str,Any] = {"model": self.model,
                                              "messages": messages,
                                              "max_tokens": max_tokens,
