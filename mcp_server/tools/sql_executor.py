@@ -2,43 +2,49 @@
 
 from __future__ import annotations
 
-from locale import normalize
 import os
-import sqlite3
+import re
+from sqlite3 import connect
+import asyncpg
 from typing import Any
+from dotenv import load_dotenv
 
-def sql_executor(query: str) -> dict[str,Any]:
-    database_path = os.environ.get("DATABASE_PATH")
+load_dotenv()
 
-    if not  database_path:
-        raise ValueError("DATABASE_PATH environment variable is not set")
+async def sql_executor(query: str) -> dict[str,Any]:
+    """
+    Execute a read-only SQL query against the configured PostgreSQL database.
 
-    normalized_query = query.strip.lower()
+    Args:
+        query: SQL SELECT or WITH query to execute.
+
+    Returns:
+        A dictionary containing the returned rows and row count.
+    """
+    database_url = os.environ.get("DATABASE_URL")
+
+    if not database_url:
+        raise ValueError("DATABASE_URL environment variable is not set")
+
+    normalized_query = query.strip().lower()
 
     if not (
         normalized_query.startswith("select")
         or normalized_query.startswith("with")
-        or normalized_query.startswith("pragma")
     ):
         raise ValueError(
             "SQL executor is read-only. "
-            "Only SELECT, WITH, and PRAGMA queries are allowed."
+            "Only SELECT and WITH queries are allowed."
         )
 
-    with sqlite3.connect(database_path) as connection:
-        connection.row_factory = sqlite3.Row
+    connection = await asyncpg.connect(database_url)
 
-        cursor = connection.execute(query)
-        rows = cursor.fetchall()
+    try:
+        rows = await connection.fetch(query)
+        return {
+            "rows": [dict(row) for row in rows],
+            "row_count": len(rows)
+        }
 
-    return {
-        "columns": (
-            [description[0] for description in cursor.description]
-            if cursor.description
-            else []
-        ),
-        "rows": [dict(row) for row in rows],
-        "row_count": len(rows),
-    }
-
-        
+    finally:
+        await connection.close()
