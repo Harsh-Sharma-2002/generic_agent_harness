@@ -7,19 +7,22 @@ MCP_URL = "http://localhost:8001/mcp"
 
 
 @pytest.mark.asyncio
-async def test_mcp_tools_and_web_search():
+async def test_mcp_tools():
     async with Client(MCP_URL) as client:
 
-        # 1. Verify both tools are advertised by the MCP server.
+        # Verify both tools are advertised.
         tool_result = await client.list_tools()
 
-        tool_names = {tool.name for tool in tool_result.tools}
+        tool_names = {
+            tool.name
+            for tool in tool_result.tools
+        }
 
         assert "web_search" in tool_names
         assert "sql_executor" in tool_names
 
-        # 2. Actually execute only web_search.
-        result = await client.call_tool(
+        # Test web search.
+        search_result = await client.call_tool(
             "web_search",
             {
                 "query": "NVIDIA",
@@ -27,7 +30,25 @@ async def test_mcp_tools_and_web_search():
             },
         )
 
-        assert result is not None
+        assert not search_result.is_error
+        assert search_result.content
 
         print("\nWeb search result:")
-        print(result)
+        print(search_result)
+
+        # Test PostgreSQL.
+        sql_result = await client.call_tool(
+            "sql_executor",
+            {
+                "query": """
+                SELECT COUNT(*) AS customer_count
+                FROM customers;
+                """
+            },
+        )
+
+        assert not sql_result.is_error
+        assert sql_result.content
+
+        print("\nSQL result:")
+        print(sql_result)
