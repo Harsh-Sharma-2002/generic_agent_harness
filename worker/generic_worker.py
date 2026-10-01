@@ -9,6 +9,7 @@ from openai.types.chat import ChatCompletionMessageParam
 
 from worker.base import BaseWorker
 from worker.llm_caller import LLMCaller
+from worker.local_llm_caller import LocalLLMCaller
 from worker.mcp_client import MCPToolClient
 
 
@@ -16,36 +17,36 @@ class GenericWorker(BaseWorker):
     """
     Generic KernelAI worker.
 
-    The worker receives its behavior through a system prompt and its
-    capabilities dynamically through MCP.
-
-    It executes the standard agent loop:
-
-        LLM -> tool call(s) -> tool result(s) -> LLM -> ...
-
-    until the model produces a final response.
+    Behavior is supplied through a system prompt.
+    Tools are discovered and executed through MCP.
     """
 
     def __init__(
         self,
-        llm: LLMCaller,
         tools: MCPToolClient,
         system_prompt: str,
+        allowed_tools: set[str] | None = None,
         max_iterations: int = 10,
         verbose: bool = False,
+        local: bool = False,
     ) -> None:
-        self.llm = llm
         self.tools = tools
         self.system_prompt = system_prompt
+        self.allowed_tools = allowed_tools
         self.max_iterations = max_iterations
         self.verbose = verbose
+
+        if local:
+            self.llm = LocalLLMCaller()
+        else:
+            self.llm = LLMCaller()
 
     def _trace(
         self,
         label: str,
         value: Any = None,
     ) -> None:
-        """Print worker execution information during verbose runs."""
+        """Print execution information during verbose runs."""
 
         if not self.verbose:
             return
@@ -74,7 +75,7 @@ class GenericWorker(BaseWorker):
         request_id: str,
     ) -> dict[str, Any]:
         """
-        Execute a request until the model returns a final response
+        Execute a request until the model produces a final response
         or the maximum number of iterations is reached.
         """
 
@@ -97,7 +98,16 @@ class GenericWorker(BaseWorker):
             },
         )
 
+        # Discover all tools exposed by MCP.
         available_tools = await self.tools.get_tools()
+
+        # Restrict this worker instance to the tools assigned to it.
+        if self.allowed_tools is not None:
+            available_tools = [
+                tool
+                for tool in available_tools
+                if tool["function"]["name"] in self.allowed_tools
+            ]
 
         self._trace(
             "AVAILABLE TOOLS",
@@ -107,6 +117,7 @@ class GenericWorker(BaseWorker):
             ],
         )
 
+        # Main agent loop.
         for iteration in range(
             1,
             self.max_iterations + 1,
@@ -126,24 +137,29 @@ class GenericWorker(BaseWorker):
                     response.content,
                 )
 
-          
+            
             # Final response
             
 
             if not response.tool_calls:
                 if response.content and response.content.strip():
+                    self._trace(
+                        "FINAL RESPONSE",
+                        response.content,
+                    )
+
                     return {
                         "content": response.content,
-                        }
+                    }
 
                 raise RuntimeError(
-                    f"LLM returned neither tool calls nor final content "
+                    "LLM returned neither tool calls nor final content "
                     f"for request {request_id!r}."
-                    )
+                )
 
            
             # Preserve assistant tool-call message
-          
+           
 
             assistant_message: ChatCompletionMessageParam = {
                 "role": "assistant",
@@ -164,8 +180,8 @@ class GenericWorker(BaseWorker):
             messages.append(assistant_message)
 
             
-            # Execute requested tools
-           
+            # Execute every tool requested by this LLM turn
+            
 
             for tool_call in response.tool_calls:
                 try:
@@ -198,10 +214,6 @@ class GenericWorker(BaseWorker):
                     tool_result,
                 )
 
-                
-                # Add tool result to conversation history
-                
-
                 messages.append(
                     {
                         "role": "tool",
@@ -213,9 +225,6 @@ class GenericWorker(BaseWorker):
             self._trace(
                 f"ITERATION {iteration} COMPLETE"
             )
-
-        # Safety limit reached
-       
 
         raise RuntimeError(
             "Worker exceeded maximum iterations "
