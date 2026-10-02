@@ -387,3 +387,6 @@ Stage 0 is complete when a terminal user can submit several substantially differ
 At this point KernelAI has a functioning **generic agent harness**.
 
 Only then move to Stage 1 and run multiple independent instances of this worker concurrently.
+
+
+Stronger gaurdrails, sidecar system manager

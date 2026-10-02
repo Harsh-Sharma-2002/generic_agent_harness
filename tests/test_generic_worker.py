@@ -13,7 +13,7 @@ async def test_generic_worker_text2sql():
     # For Stage 0, we manually perform the role that the
     # orchestrator will eventually handle: skill selection.
     skill = Path(
-        "worker/skills/text2sql.md"
+        "skills/text2sql.md"
     ).read_text(encoding="utf-8")
 
     worker = GenericWorker(
@@ -48,7 +48,7 @@ async def test_generic_worker_text2sql():
 @pytest.mark.asyncio
 async def test_generic_worker_web_search():
     skill = Path(
-        "worker/skills/web_search.md"
+        "skills/web_search.md"
     ).read_text(encoding="utf-8")
 
     worker = GenericWorker(
