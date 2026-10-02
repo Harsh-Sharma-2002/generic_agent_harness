@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from typing import Any, Awaitable, Callable
-from unittest import result
+
 
 from worker.mcp_client import MCPToolClient
 
@@ -38,7 +38,7 @@ class CompositeToolClient:
 
         mcp_tools =  await self.mcp.get_tools()
 
-        local_tool_schemas = [schema for schema in self.local_tools.values()]
+        local_tool_schemas = [schema for schema,_ in self.local_tools.values()]
 
         mcp_names = {
             tool["function"]["name"]

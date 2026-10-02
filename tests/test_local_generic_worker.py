@@ -11,7 +11,7 @@ async def test_generic_worker_text2sql():
     # For this test we manually perform the role that the
     # orchestrator will eventually handle: selecting a skill.
     skill = Path(
-        "worker/skills/text2sql.md"
+        "skills/text2sql.md"
     ).read_text(encoding="utf-8")
 
     worker = GenericWorker(
