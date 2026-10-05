@@ -34,8 +34,8 @@ class Task:
     task_id: str
     query: str
 
-    skill_name: str | None = None
-    parent_task_id: str | None = None
+    skill_name: str 
+    parent_task_id: str 
 
     status: TaskStatus = TaskStatus.QUEUED
 
