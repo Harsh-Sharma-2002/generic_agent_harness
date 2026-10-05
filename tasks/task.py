@@ -14,7 +14,7 @@ class TaskStatus(str, Enum):
 
     QUEUED = "queued"
     RUNNING = "running"
-    WAITING = "waiting"
+    BLOCKED = "blocked"
     COMPLETED = "completed"
     FAILED = "failed"
 
@@ -34,8 +34,8 @@ class Task:
     task_id: str
     query: str
 
-    skill_name: str 
-    parent_task_id: str 
+    skill_names: list[str] 
+    #parent_task_id: str 
 
     status: TaskStatus = TaskStatus.QUEUED
 

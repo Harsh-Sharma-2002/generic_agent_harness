@@ -4,3 +4,4 @@ pytest
 pytest-asyncio
 ddgs
 mcp
+asyncpg
