@@ -10,7 +10,7 @@ from openai.types.chat import ChatCompletionMessageParam
 from worker.base import BaseWorker
 from worker.llm_caller import LLMCaller
 from worker.local_llm_caller import LocalLLMCaller
-from worker.mcp_client import MCPToolClient
+from worker.clients.base import ToolClient
 
 
 class GenericWorker(BaseWorker):
@@ -18,12 +18,12 @@ class GenericWorker(BaseWorker):
     Generic KernelAI worker.
 
     Behavior is supplied through a system prompt.
-    Tools are discovered and executed through MCP.
+    Tools are provided through the configured tool client.
     """
 
     def __init__(
         self,
-        tools: MCPToolClient,
+        tools: ToolClient,
         system_prompt: str,
         allowed_tools: set[str] | None = None,
         max_iterations: int = 10,
