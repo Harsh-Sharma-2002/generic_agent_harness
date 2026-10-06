@@ -99,7 +99,7 @@ class ControlTools:
         if not task_query:
             raise ValueError("delegate_task requires a non-empty 'task'.")
 
-        if not isinstance(skill_names,list):
+        if not isinstance(skill_names,list) or not skill_names:
             raise ValueError("delegate_task requires a non-empty 'skills' list.")
 
         normalized_skills: list[str] = []
@@ -120,11 +120,11 @@ class ControlTools:
             if skill_name not in normalized_skills:
                 normalized_skills.append(skill_name)
 
-            task = await self.orchestrator.create_task(
-                request_id=self.request_id,
-                task_query=task_query,
-                skill_names=normalized_skills,
-            )
+        task = await self.orchestrator.create_task(
+            request_id=self.request_id,
+            task_query=task_query,
+            skill_names=normalized_skills,
+        )
 
         return {
             "request_id": task.request_id,

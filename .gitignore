@@ -7,3 +7,4 @@ venv/
 .pytest_cache/
 context.json
 
+notes.md

@@ -137,9 +137,9 @@ class GenericWorker(BaseWorker):
                     response.content,
                 )
 
-            
+            # -----------------------------------------------------
             # Final response
-            
+            # -----------------------------------------------------
 
             if not response.tool_calls:
                 if response.content and response.content.strip():
@@ -157,9 +157,9 @@ class GenericWorker(BaseWorker):
                     f"for request {request_id!r}."
                 )
 
-           
+            # -----------------------------------------------------
             # Preserve assistant tool-call message
-           
+            # -----------------------------------------------------
 
             assistant_message: ChatCompletionMessageParam = {
                 "role": "assistant",
@@ -179,9 +179,9 @@ class GenericWorker(BaseWorker):
 
             messages.append(assistant_message)
 
-            
+            # -----------------------------------------------------
             # Execute every tool requested by this LLM turn
-            
+            # -----------------------------------------------------
 
             for tool_call in response.tool_calls:
                 try:
@@ -189,25 +189,37 @@ class GenericWorker(BaseWorker):
                         tool_call.function.arguments
                     )
 
+                    self._trace(
+                        "TOOL CALL",
+                        {
+                            "tool": tool_call.function.name,
+                            "arguments": arguments,
+                        },
+                    )
+
+                    tool_result = await self.tools.call_tool(
+                        name=tool_call.function.name,
+                        arguments=arguments,
+                    )
+
                 except json.JSONDecodeError as exc:
-                    raise ValueError(
-                        "Invalid tool arguments returned by LLM "
-                        f"for {tool_call.function.name!r}: "
-                        f"{tool_call.function.arguments}"
-                    ) from exc
+                    tool_result = json.dumps(
+                        {
+                            "ok": False,
+                            "error": (
+                                "Invalid JSON tool arguments: "
+                                f"{exc.msg}"
+                            ),
+                        }
+                    )
 
-                self._trace(
-                    "TOOL CALL",
-                    {
-                        "tool": tool_call.function.name,
-                        "arguments": arguments,
-                    },
-                )
-
-                tool_result = await self.tools.call_tool(
-                    name=tool_call.function.name,
-                    arguments=arguments,
-                )
+                except (ValueError, RuntimeError) as exc:
+                    tool_result = json.dumps(
+                        {
+                            "ok": False,
+                            "error": str(exc),
+                        }
+                    )
 
                 self._trace(
                     "TOOL RESULT",
