@@ -1,67 +1,48 @@
-"""MCP tool client used by KernelAI task workers."""
+"""Privileged local tool client used by KernelAI supervisors."""
 
 from __future__ import annotations
 
 import json
-import os
-from typing import Any
-
-from dotenv import load_dotenv
-from mcp.client import Client
+from typing import Any, Awaitable, Callable
 
 
-load_dotenv()
+ControlToolHandler = Callable[
+    [dict[str, Any]],
+    Awaitable[Any],
+]
+
+ControlTool = tuple[
+    dict[str, Any],
+    ControlToolHandler,
+]
 
 
-class MCPToolClient:
+class ControlToolClient:
     """
-    Tool client for ordinary KernelAI task workers.
+    Tool client for privileged KernelAI control operations.
 
-    Tools are discovered and executed through the configured
-    MCP server.
+    Only explicitly registered local control tools are exposed.
 
-    Access to individual MCP tools is further restricted by
-    the skills assigned to the GenericWorker.
+    This client does not provide access to MCP tools.
     """
 
-    def __init__(self) -> None:
-        server_url = os.environ.get(
-            "MCP_SERVER_URL"
-        )
-
-        if not server_url:
-            raise ValueError(
-                "MCP_SERVER_URL environment variable is not set."
-            )
-
-        self.server_url = server_url
+    def __init__(
+        self,
+        tools: dict[str, ControlTool],
+    ) -> None:
+        self.tools = tools
 
     async def get_tools(
         self,
     ) -> list[dict[str, Any]]:
         """
-        Discover MCP tools and convert them into
-        OpenAI-compatible function-tool definitions.
+        Return the schemas of all registered control tools.
         """
 
-        async with Client(
-            self.server_url
-        ) as client:
-            result = await client.list_tools()
-
-            return [
-                {
-                    "type": "function",
-                    "function": {
-                        "name": tool.name,
-                        "description": (
-                            tool.description or ""
-                        ),
-                        "parameters": tool.input_schema,
-                    },
-                }
-                for tool in result.tools
-            ]
+        return [
+            schema
+            for schema, _ in self.tools.values()
+        ]
 
     async def call_tool(
         self,
@@ -69,39 +50,28 @@ class MCPToolClient:
         arguments: dict[str, Any],
     ) -> str:
         """
-        Execute an MCP tool and return its result as text
-        suitable for an LLM tool-result message.
+        Execute a registered privileged control tool.
         """
 
-        async with Client(
-            self.server_url
-        ) as client:
-            result = await client.call_tool(
-                name,
-                arguments,
-            )
+        try:
+            _, handler = self.tools[name]
 
-            if result.is_error:
-                raise RuntimeError(
-                    f"MCP tool {name!r} failed: "
-                    f"{result.content}"
-                )
+        except KeyError as exc:
+            raise ValueError(
+                f"Unknown control tool {name!r}."
+            ) from exc
 
-            if result.structured_content is not None:
-                return json.dumps(
-                    result.structured_content,
-                    default=str,
-                )
+        result = await handler(
+            arguments
+        )
 
-            text_parts = [
-                content.text
-                for content in result.content
-                if hasattr(
-                    content,
-                    "text",
-                )
-            ]
+        if isinstance(
+            result,
+            str,
+        ):
+            return result
 
-            return "\n".join(
-                text_parts
-            )
+        return json.dumps(
+            result,
+            default=str,
+        )
