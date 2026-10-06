@@ -77,54 +77,14 @@ class Orchestrator:
         # schedulable tasks.
         self.request_tasks: dict[str, list[str]] = {}
 
-        # ---------------------------------------------------------
+       
         # Orchestration agent configuration
-        # ---------------------------------------------------------
+      
 
         self.agent_prompt = AGENT_PATH.read_text(
             encoding="utf-8"
         )
 
-    async def submit(
-        self,
-        query: str,
-    ) -> str:
-        """
-        Submit a new user request to KernelAI.
-
-        `query` is the original user-level request.
-
-        The request is placed onto the request queue and this
-        method returns immediately with its request ID.
-        """
-
-        query = query.strip()
-
-        if not query:
-            raise ValueError(
-                "Request query cannot be empty."
-            )
-
-        request_id = (
-            f"req_{uuid.uuid4().hex}"
-        )
-
-        request = Request(
-            request_id=request_id,
-            query=query,
-        )
-
-        # Initialize request bookkeeping before making the request
-        # visible to the orchestration runtime.
-        self.request_tasks[
-            request_id
-        ] = []
-
-        await self.request_queue.put(
-            request
-        )
-
-        return request_id
 
     async def create_task(
         self,
