@@ -39,5 +39,4 @@ class Task:
 
     status: TaskStatus = TaskStatus.QUEUED
 
-    result: dict[str, Any] | None = None
-    error: str | None = None
+    
