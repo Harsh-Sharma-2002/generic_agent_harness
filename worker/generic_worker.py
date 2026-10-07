@@ -8,14 +8,14 @@ from typing import Any
 from openai.types.chat import ChatCompletionMessageParam
 
 from worker.base import BaseWorker
+from worker.clients.base import ToolClient
 from worker.llm_caller import LLMCaller
 from worker.local_llm_caller import LocalLLMCaller
-from worker.clients.base import ToolClient
 
 
 class GenericWorker(BaseWorker):
     """
-    Generic KernelAI worker.
+    Generic KernelAI agent runtime.
 
     Behavior is supplied through a system prompt.
     Tools are provided through the configured tool client.
@@ -35,8 +35,17 @@ class GenericWorker(BaseWorker):
         self.allowed_tools = allowed_tools
         self.max_iterations = max_iterations
         self.verbose = verbose
+
         self.messages: list[ChatCompletionMessageParam] = []
         self.trace: list[dict[str, Any]] = []
+
+        self.available_tools: list[dict[str, Any]] = []
+
+        self.request_id: str | None = None
+        self.iteration = 0
+
+        self.is_done = False
+        self.result: dict[str, Any] | None = None
 
         if local:
             self.llm = LocalLLMCaller()
@@ -44,9 +53,10 @@ class GenericWorker(BaseWorker):
             self.llm = LLMCaller()
 
     def _trace(
-    self,
-    event: str,
-    data: Any = None,) -> None: 
+        self,
+        event: str,
+        data: Any = None,
+    ) -> None:
         """Record an execution event and optionally print it."""
 
         self.trace.append(
@@ -77,19 +87,23 @@ class GenericWorker(BaseWorker):
         else:
             print(data)
 
-    
-
-    async def run(
+    async def _initialize(
         self,
         query: str,
         request_id: str,
-    ) -> dict[str, Any]:
+    ) -> None:
         """
-        Execute a request until the model produces a final response
-        or the maximum number of iterations is reached.
+        Initialize one GenericWorker execution.
         """
 
-        self.messages: list[ChatCompletionMessageParam] = [
+        if self.request_id is not None:
+            raise RuntimeError(
+                "GenericWorker has already been initialized."
+            )
+
+        self.request_id = request_id
+
+        self.messages = [
             {
                 "role": "system",
                 "content": self.system_prompt,
@@ -108,10 +122,8 @@ class GenericWorker(BaseWorker):
             },
         )
 
-        # Discover all tools exposed by MCP.
         available_tools = await self.tools.get_tools()
 
-        # Restrict this worker instance to the tools assigned to it.
         if self.allowed_tools is not None:
             available_tools = [
                 tool
@@ -119,137 +131,187 @@ class GenericWorker(BaseWorker):
                 if tool["function"]["name"] in self.allowed_tools
             ]
 
+        self.available_tools = available_tools
+
         self._trace(
             "AVAILABLE TOOLS",
             [
                 tool["function"]["name"]
-                for tool in available_tools
+                for tool in self.available_tools
             ],
         )
 
-        # Main agent loop.
-        for iteration in range(
-            1,
-            self.max_iterations + 1,
-        ):
+    async def run_step(
+        self,
+    ) -> bool:
+        """
+        Execute exactly one agent iteration.
+
+        Returns True when the worker has produced its final result.
+        Returns False when additional execution is required.
+        """
+
+        if self.request_id is None:
+            raise RuntimeError(
+                "GenericWorker must be initialized before run_step()."
+            )
+
+        if self.is_done:
+            return True
+
+        if self.iteration >= self.max_iterations:
+            raise RuntimeError(
+                "Worker exceeded maximum iterations "
+                f"({self.max_iterations}) "
+                f"for request {self.request_id!r}."
+            )
+
+        self.iteration += 1
+
+        self._trace(
+            f"ITERATION {self.iteration} - LLM CALL"
+        )
+
+        response = await self.llm.call(
+            messages=self.messages,
+            tools=self.available_tools,
+        )
+
+        if response.content:
             self._trace(
-                f"ITERATION {iteration} - LLM CALL"
+                "ASSISTANT",
+                response.content,
             )
 
-            response = await self.llm.call(
-                messages=self.messages,
-                tools=available_tools,
-            )
+        # ---------------------------------------------------------
+        # Final response
+        # ---------------------------------------------------------
 
-            if response.content:
+        if not response.tool_calls:
+            if response.content and response.content.strip():
+                self.result = {
+                    "content": response.content,
+                }
+
+                self.is_done = True
+
                 self._trace(
-                    "ASSISTANT",
+                    "FINAL RESPONSE",
                     response.content,
                 )
 
-            # -----------------------------------------------------
-            # Final response
-            # -----------------------------------------------------
+                return True
 
-            if not response.tool_calls:
-                if response.content and response.content.strip():
-                    self._trace(
-                        "FINAL RESPONSE",
-                        response.content,
-                    )
+            raise RuntimeError(
+                "LLM returned neither tool calls nor final content "
+                f"for request {self.request_id!r}."
+            )
 
-                    return {
-                        "content": response.content,
-                    }
+        # ---------------------------------------------------------
+        # Preserve assistant tool-call message
+        # ---------------------------------------------------------
 
-                raise RuntimeError(
-                    "LLM returned neither tool calls nor final content "
-                    f"for request {request_id!r}."
+        assistant_message: ChatCompletionMessageParam = {
+            "role": "assistant",
+            "content": response.content,
+            "tool_calls": [
+                {
+                    "id": tool_call.id,
+                    "type": "function",
+                    "function": {
+                        "name": tool_call.function.name,
+                        "arguments": tool_call.function.arguments,
+                    },
+                }
+                for tool_call in response.tool_calls
+            ],
+        }
+
+        self.messages.append(
+            assistant_message
+        )
+
+        # ---------------------------------------------------------
+        # Execute every tool requested during this turn
+        # ---------------------------------------------------------
+
+        for tool_call in response.tool_calls:
+            try:
+                arguments = json.loads(
+                    tool_call.function.arguments
                 )
-
-            # -----------------------------------------------------
-            # Preserve assistant tool-call message
-            # -----------------------------------------------------
-
-            assistant_message: ChatCompletionMessageParam = {
-                "role": "assistant",
-                "content": response.content,
-                "tool_calls": [
-                    {
-                        "id": tool_call.id,
-                        "type": "function",
-                        "function": {
-                            "name": tool_call.function.name,
-                            "arguments": tool_call.function.arguments,
-                        },
-                    }
-                    for tool_call in response.tool_calls
-                ],
-            }
-
-            self.messages.append(assistant_message)
-
-            # -----------------------------------------------------
-            # Execute every tool requested by this LLM turn
-            # -----------------------------------------------------
-
-            for tool_call in response.tool_calls:
-                try:
-                    arguments = json.loads(
-                        tool_call.function.arguments
-                    )
-
-                    self._trace(
-                        "TOOL CALL",
-                        {
-                            "tool": tool_call.function.name,
-                            "arguments": arguments,
-                        },
-                    )
-
-                    tool_result = await self.tools.call_tool(
-                        name=tool_call.function.name,
-                        arguments=arguments,
-                    )
-
-                except json.JSONDecodeError as exc:
-                    tool_result = json.dumps(
-                        {
-                            "ok": False,
-                            "error": (
-                                "Invalid JSON tool arguments: "
-                                f"{exc.msg}"
-                            ),
-                        }
-                    )
-
-                except (ValueError, RuntimeError) as exc:
-                    tool_result = json.dumps(
-                        {
-                            "ok": False,
-                            "error": str(exc),
-                        }
-                    )
 
                 self._trace(
-                    "TOOL RESULT",
-                    tool_result,
+                    "TOOL CALL",
+                    {
+                        "tool": tool_call.function.name,
+                        "arguments": arguments,
+                    },
                 )
 
-                self.messages.append(
+                tool_result = await self.tools.call_tool(
+                    name=tool_call.function.name,
+                    arguments=arguments,
+                )
+
+            except json.JSONDecodeError as exc:
+                tool_result = json.dumps(
                     {
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "content": tool_result,
+                        "ok": False,
+                        "error": (
+                            "Invalid JSON tool arguments: "
+                            f"{exc.msg}"
+                        ),
+                    }
+                )
+
+            except (ValueError, RuntimeError) as exc:
+                tool_result = json.dumps(
+                    {
+                        "ok": False,
+                        "error": str(exc),
                     }
                 )
 
             self._trace(
-                f"ITERATION {iteration} COMPLETE"
+                "TOOL RESULT",
+                tool_result,
             )
 
-        raise RuntimeError(
-            "Worker exceeded maximum iterations "
-            f"({self.max_iterations}) "
-            f"for request {request_id!r}."
+            self.messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": tool_result,
+                }
+            )
+
+        self._trace(
+            f"ITERATION {self.iteration} COMPLETE"
         )
+
+        return False
+
+    async def run(
+        self,
+        query: str,
+        request_id: str,
+    ) -> dict[str, Any]:
+        """
+        Execute continuously until the worker produces a final result.
+        """
+
+        await self._initialize(
+            query=query,
+            request_id=request_id,
+        )
+
+        while not self.is_done:
+            await self.run_step()
+
+        if self.result is None:
+            raise RuntimeError(
+                "Worker completed without producing a result."
+            )
+
+        return self.result
