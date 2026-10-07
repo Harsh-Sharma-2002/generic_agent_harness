@@ -12,9 +12,7 @@ from worker.generic_worker import GenericWorker
 
 
 TASK_WORKER_ROLE_PATH = (
-    Path(__file__).parent
-    / "roles"
-    / "task_worker.md"
+    Path(__file__).with_name("task_worker.md")
 )
 
 

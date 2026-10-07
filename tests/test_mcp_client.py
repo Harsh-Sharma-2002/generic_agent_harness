@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from worker.mcp_client import MCPToolClient
+from worker.clients.mcp import MCPToolClient
 
 
 @pytest.mark.asyncio

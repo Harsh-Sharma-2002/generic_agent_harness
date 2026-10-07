@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from tasks.task import Task, TaskStatus
-from worker.task_executor import TaskExecutor
+from tasks.task_executor import TaskExecutor
 
 
 @pytest.mark.asyncio
