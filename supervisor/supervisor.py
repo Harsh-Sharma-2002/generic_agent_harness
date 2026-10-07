@@ -63,9 +63,9 @@ class Supervisor:
             local=local,
         )
 
-        # ---------------------------------------------------------
+      
         # Supervisor control capabilities
-        # ---------------------------------------------------------
+       
 
         control_tools = SupervisorControlTools(
             supervisor=self,
@@ -75,9 +75,9 @@ class Supervisor:
             tools=control_tools.get_tools(),
         )
 
-        # ---------------------------------------------------------
+        
         # Request-level GenericWorker
-        # ---------------------------------------------------------
+        
 
         role_prompt = SUPERVISOR_ROLE_PATH.read_text(
             encoding="utf-8"
@@ -109,35 +109,35 @@ class Supervisor:
 
         while not self.agent.is_done:
 
-            # -----------------------------------------------------
+           
             # One Supervisor reasoning / control-tool step
-            # -----------------------------------------------------
+            
 
             await self.agent.run_step()
 
             if self.agent.is_done:
                 break
 
-            # -----------------------------------------------------
+            
             # No Tasks were delegated during this step.
-            # -----------------------------------------------------
+            
 
             if not self.pending_tasks:
                 continue
 
-            # -----------------------------------------------------
+            
             # Detach the current batch before execution.
             #
             # delegate_task() calls during a future planning step
             # therefore belong to a new batch.
-            # -----------------------------------------------------
+            
 
             batch = self.pending_tasks
             self.pending_tasks = []
 
-            # -----------------------------------------------------
+            
             # Execute all Tasks from this planning point together.
-            # -----------------------------------------------------
+            
 
             outcomes = await asyncio.gather(
                 *[
@@ -146,18 +146,18 @@ class Supervisor:
                 ]
             )
 
-            # -----------------------------------------------------
+            
             # Store outcomes.
-            # -----------------------------------------------------
+            
 
             for outcome in outcomes:
                 self.outcomes[
                     outcome.task_id
                 ] = outcome
 
-            # -----------------------------------------------------
+            
             # Give bounded Task outcomes back to the Supervisor.
-            # -----------------------------------------------------
+            
 
             self._add_outcomes_to_context(
                 outcomes
