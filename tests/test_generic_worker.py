@@ -1,34 +1,27 @@
-"""End-to-end GenericWorker test using the ASU LLM backend."""
+"""End-to-end GenericWorker tests using the ASU LLM backend."""
 
 from pathlib import Path
 
 import pytest
 
+from worker.clients.mcp import MCPToolClient
 from worker.generic_worker import GenericWorker
-from worker.mcp_client import MCPToolClient
 
 
 @pytest.mark.asyncio
-async def test_generic_worker_text2sql():
-    # For Stage 0, we manually perform the role that the
-    # orchestrator will eventually handle: skill selection.
+async def test_generic_worker_text2sql() -> None:
     skill = Path(
         "skills/text2sql.md"
-    ).read_text(encoding="utf-8")
+    ).read_text(
+        encoding="utf-8"
+    )
 
     worker = GenericWorker(
         tools=MCPToolClient(),
         system_prompt=skill,
-
-        # The future orchestrator will also decide which capabilities
-        # this worker instance is allowed to access.
         allowed_tools={"sql_executor"},
-
         max_iterations=10,
         verbose=True,
-
-        # Default is False, but keeping this explicit makes it obvious
-        # that this test must use the ASU LLMCaller, not Ollama.
         local=False,
     )
 
@@ -45,11 +38,14 @@ async def test_generic_worker_text2sql():
     print("=" * 60)
     print(result["content"])
 
+
 @pytest.mark.asyncio
-async def test_generic_worker_web_search():
+async def test_generic_worker_web_search() -> None:
     skill = Path(
         "skills/web_search.md"
-    ).read_text(encoding="utf-8")
+    ).read_text(
+        encoding="utf-8"
+    )
 
     worker = GenericWorker(
         tools=MCPToolClient(),
