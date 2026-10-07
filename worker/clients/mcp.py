@@ -81,27 +81,27 @@ class MCPToolClient:
                 arguments,
             )
 
-            if result.is_error:
-                raise RuntimeError(
-                    f"MCP tool {name!r} failed: "
-                    f"{result.content}"
-                )
-
-            if result.structured_content is not None:
-                return json.dumps(
-                    result.structured_content,
-                    default=str,
-                )
-
-            text_parts = [
-                content.text
-                for content in result.content
-                if hasattr(
-                    content,
-                    "text",
-                )
-            ]
-
-            return "\n".join(
-                text_parts
+        if result.is_error:
+            raise RuntimeError(
+                f"MCP tool {name!r} failed: "
+                f"{result.content}"
             )
+
+        if result.structured_content is not None:
+            return json.dumps(
+                result.structured_content,
+                default=str,
+            )
+
+        text_parts = [
+            content.text
+            for content in result.content
+            if hasattr(
+                content,
+                "text",
+            )
+        ]
+
+        return "\n".join(
+            text_parts
+        )

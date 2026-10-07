@@ -35,6 +35,8 @@ class GenericWorker(BaseWorker):
         self.allowed_tools = allowed_tools
         self.max_iterations = max_iterations
         self.verbose = verbose
+        self.messages: list[ChatCompletionMessageParam] = []
+        self.trace: list[dict[str, Any]] = []
 
         if local:
             self.llm = LocalLLMCaller()
@@ -42,32 +44,40 @@ class GenericWorker(BaseWorker):
             self.llm = LLMCaller()
 
     def _trace(
-        self,
-        label: str,
-        value: Any = None,
-    ) -> None:
-        """Print execution information during verbose runs."""
+    self,
+    event: str,
+    data: Any = None,) -> None: 
+        """Record an execution event and optionally print it."""
+
+        self.trace.append(
+            {
+                "event": event,
+                "data": data,
+            }
+        )
 
         if not self.verbose:
             return
 
         print("\n" + "-" * 60)
-        print(f"[{label}]")
+        print(f"[{event}]")
         print("-" * 60)
 
-        if value is None:
+        if data is None:
             return
 
-        if isinstance(value, (dict, list)):
+        if isinstance(data, (dict, list)):
             print(
                 json.dumps(
-                    value,
+                    data,
                     indent=2,
                     default=str,
                 )
             )
         else:
-            print(value)
+            print(data)
+
+    
 
     async def run(
         self,
@@ -79,7 +89,7 @@ class GenericWorker(BaseWorker):
         or the maximum number of iterations is reached.
         """
 
-        messages: list[ChatCompletionMessageParam] = [
+        self.messages: list[ChatCompletionMessageParam] = [
             {
                 "role": "system",
                 "content": self.system_prompt,
@@ -127,7 +137,7 @@ class GenericWorker(BaseWorker):
             )
 
             response = await self.llm.call(
-                messages=messages,
+                messages=self.messages,
                 tools=available_tools,
             )
 
@@ -177,7 +187,7 @@ class GenericWorker(BaseWorker):
                 ],
             }
 
-            messages.append(assistant_message)
+            self.messages.append(assistant_message)
 
             # -----------------------------------------------------
             # Execute every tool requested by this LLM turn
@@ -226,7 +236,7 @@ class GenericWorker(BaseWorker):
                     tool_result,
                 )
 
-                messages.append(
+                self.messages.append(
                     {
                         "role": "tool",
                         "tool_call_id": tool_call.id,
