@@ -87,7 +87,7 @@ class GenericWorker(BaseWorker):
         else:
             print(data)
 
-    async def _initialize(
+    async def start(
         self,
         query: str,
         request_id: str,
@@ -301,7 +301,7 @@ class GenericWorker(BaseWorker):
         Execute continuously until the worker produces a final result.
         """
 
-        await self._initialize(
+        await self.start(
             query=query,
             request_id=request_id,
         )

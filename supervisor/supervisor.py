@@ -38,10 +38,15 @@ class Supervisor:
         self,
         request: Request,
         max_iterations: int = 10,
+        max_concurrent_tasks: int = 5,
         verbose: bool = False,
         local: bool = False,
     ) -> None:
         self.request = request
+        if max_concurrent_tasks < 1:
+            raise ValueError(
+            "max_concurrent_tasks must be at least 1."
+            )
 
         self.max_iterations = max_iterations
         self.verbose = verbose
@@ -63,6 +68,9 @@ class Supervisor:
             local=local,
         )
 
+        self.task_semaphore = asyncio.Semaphore(
+        max_concurrent_tasks
+        )
       
         # Supervisor control capabilities
        
@@ -94,6 +102,20 @@ class Supervisor:
             verbose=verbose,
             local=local,
         )
+
+    async def _execute_task(
+        self,
+        task: Task,
+        ) -> TaskOutcome:
+        """
+        Execute one child Task while respecting this Supervisor's
+        concurrent Task limit.
+        """
+
+        async with self.task_semaphore:
+            return await self.task_executor.execute(
+                task
+            )
 
     async def run(
         self,
@@ -141,7 +163,7 @@ class Supervisor:
 
             outcomes = await asyncio.gather(
                 *[
-                    self.task_executor.execute(task)
+                    self._execute_task(task)
                     for task in batch
                 ]
             )
