@@ -1,0 +1,108 @@
+{
+  "test": "ten_concurrent_requests",
+  "configuration": {
+    "submitted_requests": 10,
+    "max_concurrent_requests": 3,
+    "max_concurrent_tasks_per_supervisor": 3
+  },
+  "summary": {
+    "completed": 10,
+    "failed": 0
+  },
+  "final_orchestrator_state": {
+    "submitted_request_ids": [],
+    "active_request_ids": []
+  },
+  "results": [
+    {
+      "request_id": "orchestrator-test-001",
+      "query": "Determine how many customers are currently stored in the database.",
+      "status": "completed",
+      "result": {
+        "content": "Task completed with answer: 100 customers.</think>There are **100 customers** currently stored in the database.\n\nDetails:\n- **Table:** `customers` (public schema), with columns including `customer_id`, `first_name`, `last_name`, `email`, `state`, and `signup_date`\n- **Query used:** `SELECT COUNT(*) AS total_customers FROM customers;` (read-only)"
+      },
+      "error": null
+    },
+    {
+      "request_id": "orchestrator-test-002",
+      "query": "Determine how many products are currently stored in the database.",
+      "status": "completed",
+      "result": {
+        "content": "Task done: 20 products.</think>There are currently **20 products** stored in the database."
+      },
+      "error": null
+    },
+    {
+      "request_id": "orchestrator-test-003",
+      "query": "Find the most expensive product in the database and report its name and price.",
+      "status": "completed",
+      "result": {
+        "content": "</think>The most expensive product in the database is the **Office Chair**, priced at **$249.99**."
+      },
+      "error": null
+    },
+    {
+      "request_id": "orchestrator-test-004",
+      "query": "Search the web for recent information about NVIDIA Blackwell GPUs and summarize it.",
+      "status": "completed",
+      "result": {
+        "content": "</think>Here's a summary of recent information about NVIDIA Blackwell GPUs:\n\n## Overview\nBlackwell is NVIDIA's current-generation GPU architecture, announced at GTC in March 2024 as the successor to Hopper. It delivers roughly **5x the AI inference performance of H100 per GPU**, packing **208 billion transistors** in two chiplet dies linked by a 10 TB/s NVLink connection, built on TSMC's 4NP process.\n\n## Product Lineup\n- **B100/B200** \u2014 Data center GPUs; the flagship B200 runs roughly $30,000\u2013$40,000 per module.\n- **GB200 NVL72** \u2014 Rack-scale system pairing 36 Grace CPUs with 72 Blackwell GPUs as a single GPU domain, claimed to be 30x faster for trillion-parameter LLM inference vs. Hopper.\n- **B300/GB300 \"Blackwell Ultra\"** \u2014 Refresh generation shipping in volume since H2 2025, with 1.5x denser FP4 performance and 2x attention performance over GB200, plus the new NVFP4 precision format.\n- **RTX 50-series (5070/5080/5090)** \u2014 Consumer Blackwell cards launched January 2025 with GDDR7, 5th-gen Tensor Cores, and DLSS 4 Multi Frame Generation, though the launch was marred by shortages and some cards missing ROPs.\n\n## Availability & Demand\n- Blackwell entered full volume production in early 2025 and is effectively **sold out through mid-2026**, with a backlog of ~3.6 million units.\n- TrendForce estimates Blackwell makes up **over 80% of NVIDIA's high-end GPU shipments in 2025**.\n- Big cloud providers (Microsoft, AWS, Google Cloud, Oracle) and Meta have locked in most capacity, now ordering in 100,000-GPU quantities, while smaller AI companies face 12+ month waits.\n\n## Recent Highlights\n- Blackwell was the only platform submitting results across **all MLPerf Training v5.0 benchmarks** (June 2025), posting breakthrough numbers.\n- Blackwell Ultra is optimized for **AI reasoning workloads** using NVFP4.\n- The next architecture, **Rubin**, is already on deck as the successor.\n\n**Bottom line:** Blackwell is NVIDIA's dominant generation across both data center and consumer markets, with demand far outstripping supply and the Ultra refresh now ramping at scale."
+      },
+      "error": null
+    },
+    {
+      "request_id": "orchestrator-test-005",
+      "query": "Search the web for recent information about AMD AI GPUs and summarize it.",
+      "status": "completed",
+      "result": {
+        "content": "The task completed with a comprehensive summary. Produce final answer.</think>Here's a summary of the latest on AMD AI GPUs, based on the research:\n\n# AMD AI GPUs \u2014 Recent News Summary\n\n## Products\n- **MI350 Series (MI350X/MI355X)** \u2014 Announced at \"Advancing AI 2025\" (June 2025). Built on CDNA 4, the MI355X offers 288GB HBM3E and ~8TB/s bandwidth, with AMD claiming up to 4x the AI compute and 35x inference gains over the prior MI300X. AMD positioned it against NVIDIA's Blackwell B200, leaning on superior memory capacity, though NVIDIA retained a lead in compute efficiency and software maturity.\n- **MI400 Series & \"Helios\" rack-scale platform** \u2014 Launched at \"Advancing AI 2026\" (July 2026). The MI455X flagship reportedly ships with 432GB of HBM4, and Helios is AMD's answer to NVIDIA's NVL72, pairing 72 GPUs per rack. Supermicro is helping ramp production, and Microsoft is bringing Helios to Azure.\n- **MI500 Series** \u2014 Previewed in 2026 with claims of up to 1,000x the AI performance of MI300X for next-generation models.\n\n## Major Deals\n- **OpenAI (Oct 2025):** Agreement to deploy 6 gigawatts of AMD Instinct GPUs over several years, starting with MI450-series, plus a stock warrant tied to deployment milestones.\n- **Oracle (Oct 2025):** First hyperscaler to offer a publicly available AI supercluster with 50,000 MI450 GPUs starting Q3 2026; earlier announced clusters of up to 131,072 MI355X accelerators.\n- **Microsoft:** Bringing the Helios platform to Azure.\n\n## Software (ROCm)\n- **ROCm 7** (July 2025) brought major improvements in AI framework support, performance, and Windows support, plus support for Radeon RX 9000 and Ryzen AI Max.\n- **ROCm.AI** (July 2026) introduced AI-native developer tooling, letting natural-language/assistant workflows handle install, deployment, and optimization on AMD hardware.\n\n## Financials\n- **FY2025:** Data Center revenue hit a record $16.6B, up 32% YoY, driven by EPYC gains and Instinct GPU scaling.\n- **Q2 2026:** Record revenue of $11.5B (+50% YoY); Data Center revenue more than doubled (+107%) to $6.7B. Helios shipments are expected to ramp in Q4 2026.\n\n## Bottom Line\nAMD has gone from niche challenger to a credible second source for frontier AI compute. The MI350 series narrowed the hardware gap with NVIDIA, the OpenAI and Oracle deals validated the MI450/Helios generation, ROCm 7 narrowed the software gap, and Data Center revenue more than doubled YoY as of mid-2026. NVIDIA still leads on software maturity and system-level incumbency, but AMD's momentum is strong."
+      },
+      "error": null
+    },
+    {
+      "request_id": "orchestrator-test-006",
+      "query": "Determine how many orders are currently stored in the database.",
+      "status": "completed",
+      "result": {
+        "content": "Done.</think>There are currently **500 orders** stored in the database.\n\nDetails:\n- The count was taken from the `orders` table, which contains columns `order_id`, `customer_id`, `order_date`, and `status`.\n- The table has no soft-delete or archival columns (e.g., `deleted_at` or `is_archived`), so all 500 rows represent active order records."
+      },
+      "error": null
+    },
+    {
+      "request_id": "orchestrator-test-007",
+      "query": "Determine the most expensive product in the database. Then search the web for recent information relevant to that exact product.",
+      "status": "completed",
+      "result": {
+        "content": "Both tasks complete. Synthesize final answer.</think>## Most Expensive Product in the Database\n\nThe **Office Chair** (product ID 11) is the most expensive product, priced at **$249.99**. It belongs to the **Home** category with 25 units in stock. (The product record doesn't include a description column.)\n\n## Recent Web Research on This Product\n\nNo exact product named \"Office Chair\" at $249.99 surfaced in web results, so the findings below cover the competitive landscape and market context around that price point \u2014 which is most useful for evaluating it.\n\n**Direct competitors at or near $250:**\n- **Hbada E3** ($229) \u2014 a leading under-$300 ergonomic chair; strong on aesthetics and easy setup\n- **Sihoo Doro C300** ($306) \u2014 praised for the best \"adjustability per dollar\" in the segment\n- **Steelcase Series 1** \u2014 the most credible entry-level ergonomic pick, with a flexing LiveBack backrest, 4D arms, and a 12-year warranty\n- **Branch Ergonomic Chair** (~$299\u2013$359) \u2014 a top \"best for most people\" pick with 8-point adjustability and a 7-year warranty, so a well-equipped chair at $249.99 would undercut it\n- **Amazon Basics Executive** ($152) \u2014 the safe budget benchmark\n\n**Buyer guidance for this tier:** Look for real ergonomic features \u2014 adjustable lumbar, 3D/4D armrests, breathable mesh \u2014 plus good weight capacity and a solid warranty. Reviewers advise avoiding no-name Amazon listings (e.g., Sweetcrispy, Furmax).\n\n**Market trends (2025\u20132026):**\n- The ergonomic office chair market is growing ~7.5% annually, from ~$4.1B (2025) to a projected ~$7.3B by 2033\n- Hybrid/remote work remains the primary demand driver, especially relevant for home-category chairs like this one\n- Key trends include ergonomic adjustability, sustainable materials, and smart-tech integration\n- Mid-range chairs (~$250\u2013$350) now deliver \"near-premium\" quality at a fraction of Herman Miller/Steelcase prices\n\n**Bottom line:** $249.99 sits in the sweet spot of the mid-range ergonomic segment \u2014 above the risky no-name tier and below Branch's ~$300+ pricing. The chair is competitive if it offers adjustable lumbar, multidimensional armrests, mesh backing, and a solid warranty; otherwise the Hbada E3 ($229) or Steelcase Series 1 offer proven alternatives."
+      },
+      "error": null
+    },
+    {
+      "request_id": "orchestrator-test-008",
+      "query": "Independently determine the number of customers and the number of products in the database, then give me a combined summary.",
+      "status": "completed",
+      "result": {
+        "content": "</think>Both counts have been determined independently from the database:\n\n**Combined Summary**\n\n| Entity | Count | Source |\n|---|---|---|\n| Customers | **100** | `customers` table (counted by `customer_id`) |\n| Products | **20** | `products` table (counted by `product_id`) |\n\nThe database contains **100 customers** and **20 products** \u2014 a ratio of 5 customers per product. Each count was computed with a full `COUNT(*)` over its respective table, so these are exact totals covering every row in the database."
+      },
+      "error": null
+    },
+    {
+      "request_id": "orchestrator-test-009",
+      "query": "Search the web for recent information about NVIDIA Blackwell GPUs and independently determine how many customers are in the database. Summarize both.",
+      "status": "completed",
+      "result": {
+        "content": "Both tasks completed. Synthesize final answer.</think>Both tasks completed successfully. Here's the combined summary:\n\n## NVIDIA Blackwell GPUs \u2014 Recent Highlights\n\n- **Product lineup:** Blackwell spans consumer (GeForce RTX 50 series \u2014 RTX 5090/5080/5070 launched January 2025, RTX 5060 family from $299) and data center (B200, GB200 NVL72 rack-scale system, and the Blackwell Ultra / GB300 NVL72 released around August 2025).\n- **Architecture & performance:** Fourth-gen RT cores, fifth-gen Tensor cores, DLSS 4 Multi Frame Generation (~2x performance over RTX 40), GDDR7 memory, PCIe 5.0. Blackwell Ultra GPUs pack 288 GB HBM3e each (up from 192 GB on B200) with much higher FP4/FP8 compute.\n- **Ramp & revenue:** After early scaling issues were resolved, Blackwell became the majority of NVIDIA's data center revenue, driving record quarters (e.g., ~$75B and ~$89B data center revenue, up 92\u2013117% YoY).\n- **Adoption:** Major deployments at Meta (multiyear, millions of GPUs), Microsoft (Fairwater AI superfactory), plus OpenAI, AWS, and other hyperscalers. NVIDIA's Rubin architecture is queued as the successor for 2026\u20132027.\n\n## Database \u2014 Customer Count\n\nI independently determined the count directly from the database: there are **exactly 100 customers**, counted via a read-only query against the `customers` table.\n\n**Bottom line:** Blackwell is NVIDIA's dominant, ramping AI compute platform powering record revenue and landmark hyperscaler deals, while your database contains 100 customer records."
+      },
+      "error": null
+    },
+    {
+      "request_id": "orchestrator-test-010",
+      "query": "Find the most expensive product in the database and the total number of customers. After identifying the product, search the web for recent information about that product. Return one combined report.",
+      "status": "completed",
+      "result": {
+        "content": "</think>Both tasks completed. All results are validated and sufficient to produce the report.\n\n---\n\n# Combined Report: Most Expensive Product & Customer Count\n\n## 1. Most Expensive Product: Office Chair\n- **Product:** Office Chair (product_id 11)\n- **Price:** $249.99\n- **Stock:** 25 units\n- **Category:** Home\n\n## 2. Total Number of Customers\n- **Total customers:** 100\n\n## 3. Recent Web Information About Office Chairs\n\n**Major industry consolidation:** The office seating industry's biggest recent development is **HNI Corporation's $2.2 billion acquisition of Steelcase**, completed in **December 2025**. The deal creates a combined **~$5.8 billion furniture giant**, making HNI/Steelcase a market leader alongside Herman Miller (MillerKnoll) and Haworth amid accelerating return-to-office trends.\n\n**Market size and growth:** The global office chair market was valued at roughly **$10.66 billion in 2024**, projected to reach **~$14.35 billion by 2032** (CAGR ~4.4%). The ergonomic office chair segment is growing even faster (~5.4% annual growth, ~$14.5 billion in 2025), driven by ergonomics awareness and hybrid-work demand.\n\n**Tariffs pushing prices up:** 2025 brought significant pricing pressure \u2014 major U.S. contract furniture makers announced **tariff-driven price increases** (April 2025), more vendors raised prices through mid-2025, and NPR reported (November 2025) that new tariffs on imported furniture are likely to **raise consumer prices** for furniture including chairs.\n\n**Product and design trends:** 2025 buying guides continue to rank Herman Miller, Steelcase, and Logitech G chairs as top picks. Notable product developments include Herman Miller's **Vantum chair** ($1,195 MSRP), highlighted as a more \"accessible premium\" ergonomic option, plus broader trends toward **sustainable materials, smart tech integration** (posture sensors/feedback), and inclusive design.\n\n---\n\n**Sources:** HNI Corporation press release (\"HNI Corporation Completes Acquisition of Steelcase Inc.\"); Contract furniture trade press; market research reports (Office Chairs Market 2025\u20132032; Ergonomic Office Chairs Market); Furniture Today (June 2024, Vantum gaming chair update); NPR (Nov 7, 2025, furniture prices and tariffs); TechPickStream Vantum review (Dec 2025).\n\n*Note: The database product is a generic \"Office Chair\" in the Home category, so web results reflect the broader office chair market rather than this specific product.*"
+      },
+      "error": null
+    }
+  ]
+}
