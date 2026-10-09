@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from observability.tracer import RuntimeTracer
 from supervisor.supervisor import Supervisor
 from tasks.request import Request
 
@@ -29,6 +30,7 @@ class Orchestrator:
         max_concurrent_tasks: int = 5,
         verbose: bool = False,
         local: bool = False,
+        trace: RuntimeTracer | None = None,
     ) -> None:
         if max_concurrent_requests < 1:
             raise ValueError(
@@ -54,6 +56,7 @@ class Orchestrator:
 
         self.verbose = verbose
         self.local = local
+        self.trace = trace
 
         # Every Request currently inside KernelAI.
         #
@@ -115,12 +118,24 @@ class Orchestrator:
             request_id
         )
 
+        self._emit_request_event(
+            event="request_submitted",
+            request_id=request_id,
+        )
+
         try:
             # Wait for Request-level admission capacity.
             async with self.request_semaphore:
                 return await self._execute_request(
                     request
                 )
+
+        except asyncio.CancelledError:
+            self._emit_request_event(
+                event="request_cancelled",
+                request_id=request_id,
+            )
+            raise
 
         finally:
             # The Request has completely left the system.
@@ -147,6 +162,7 @@ class Orchestrator:
             ),
             verbose=self.verbose,
             local=self.local,
+            trace=self.trace,
         )
 
         # The Request is now active.
@@ -154,8 +170,33 @@ class Orchestrator:
             request.request_id
         ] = supervisor
 
+        self._emit_request_event(
+            event="request_admitted",
+            request_id=request.request_id,
+        )
+
         try:
-            return await supervisor.run()
+            result = await supervisor.run()
+
+            self._emit_request_event(
+                event="request_completed",
+                request_id=request.request_id,
+            )
+
+            return result
+
+        except asyncio.CancelledError:
+            # submit() owns REQUEST_CANCELLED so cancellation is
+            # emitted exactly once.
+            raise
+
+        except Exception as exc:
+            self._emit_request_event(
+                event="request_failed",
+                request_id=request.request_id,
+                error=type(exc).__name__,
+            )
+            raise
 
         finally:
             # The Supervisor is no longer executing.
@@ -163,3 +204,38 @@ class Orchestrator:
                 request.request_id,
                 None,
             )
+
+    def _emit_request_event(
+        self,
+        event: str,
+        request_id: str,
+        **data: Any,
+    ) -> None:
+        """
+        Emit one Orchestrator lifecycle event.
+        """
+
+        if self.trace is None:
+            return
+
+        system_requests = len(
+            self.submitted_request_ids
+        )
+
+        active_requests = len(
+            self.active_requests
+        )
+
+        waiting_requests = (
+            system_requests - active_requests
+        )
+
+        self.trace.emit(
+            component="orchestrator",
+            event=event,
+            request_id=request_id,
+            system_requests=system_requests,
+            active_requests=active_requests,
+            waiting_requests=waiting_requests,
+            **data,
+        )
