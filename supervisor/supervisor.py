@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from observability.tracer import RuntimeTracer
 from supervisor.control_tools import SupervisorControlTools
 from tasks.outcome import TaskOutcome
 from tasks.request import Request
@@ -41,16 +42,19 @@ class Supervisor:
         max_concurrent_tasks: int = 5,
         verbose: bool = False,
         local: bool = False,
+        trace: RuntimeTracer | None = None,
     ) -> None:
         self.request = request
+
         if max_concurrent_tasks < 1:
             raise ValueError(
-            "max_concurrent_tasks must be at least 1."
+                "max_concurrent_tasks must be at least 1."
             )
 
         self.max_iterations = max_iterations
         self.verbose = verbose
         self.local = local
+        self.trace = trace
 
         # Every Task created during this Request.
         self.tasks: dict[str, Task] = {}
@@ -66,15 +70,14 @@ class Supervisor:
             max_iterations=max_iterations,
             verbose=verbose,
             local=local,
+            trace=self.trace,
         )
 
         self.task_semaphore = asyncio.Semaphore(
-        max_concurrent_tasks
+            max_concurrent_tasks
         )
-      
-        # Supervisor control capabilities
-       
 
+        # Supervisor control capabilities.
         control_tools = SupervisorControlTools(
             supervisor=self,
         )
@@ -83,10 +86,7 @@ class Supervisor:
             tools=control_tools.get_tools(),
         )
 
-        
-        # Request-level GenericWorker
-        
-
+        # Request-level GenericWorker.
         role_prompt = SUPERVISOR_ROLE_PATH.read_text(
             encoding="utf-8"
         )
@@ -101,20 +101,32 @@ class Supervisor:
             max_iterations=max_iterations,
             verbose=verbose,
             local=local,
+            trace=self.trace,
+            worker_role="supervisor",
         )
 
     async def _execute_task(
-        self,
-        task: Task,
-        ) -> TaskOutcome:
+    self,
+    task: Task,
+) -> TaskOutcome:
         """
         Execute one child Task while respecting this Supervisor's
         concurrent Task limit.
         """
 
+        self._emit(
+            event="task_waiting",
+            task_id=task.task_id,
+        )
+
         async with self.task_semaphore:
+            self._emit(
+                event="task_started",
+                task_id=task.task_id,
+            )
+
             return await self.task_executor.execute(
-                task
+            task
             )
 
     async def run(
@@ -124,73 +136,92 @@ class Supervisor:
         Execute the complete lifecycle of this Request.
         """
 
-        await self.agent.start(
-            query=self.request.query,
-            request_id=self.request.request_id,
+        self._emit(
+            event="supervisor_started",
         )
 
-        while not self.agent.is_done:
-
-           
-            # One Supervisor reasoning / control-tool step
-            
-
-            await self.agent.run_step()
-
-            if self.agent.is_done:
-                break
-
-            
-            # No Tasks were delegated during this step.
-            
-
-            if not self.pending_tasks:
-                continue
-
-            
-            # Detach the current batch before execution.
-            #
-            # delegate_task() calls during a future planning step
-            # therefore belong to a new batch.
-            
-
-            batch = self.pending_tasks
-            self.pending_tasks = []
-
-            
-            # Execute all Tasks from this planning point together.
-            
-
-            outcomes = await asyncio.gather(
-                *[
-                    self._execute_task(task)
-                    for task in batch
-                ]
+        try:
+            await self.agent.start(
+                query=self.request.query,
+                request_id=self.request.request_id,
             )
 
-            
-            # Store outcomes.
-            
+            while not self.agent.is_done:
 
-            for outcome in outcomes:
-                self.outcomes[
-                    outcome.task_id
-                ] = outcome
+                self._emit(
+                    event="supervisor_step_started",
+                )
 
-            
-            # Give bounded Task outcomes back to the Supervisor.
-            
+                # One Supervisor reasoning / control-tool step.
+                await self.agent.run_step()
 
-            self._add_outcomes_to_context(
-                outcomes
+                self._emit(
+                    event="supervisor_step_completed",
+                )
+
+                if self.agent.is_done:
+                    break
+
+                # No Tasks were delegated during this step.
+                if not self.pending_tasks:
+                    continue
+
+                # Detach the current batch before execution.
+                #
+                # delegate_task() calls during a future planning step
+                # therefore belong to a new batch.
+                batch = self.pending_tasks
+                self.pending_tasks = []
+
+                self._emit(
+                    event="batch_started",
+                    task_count=len(batch),
+                )
+
+                # Execute all Tasks from this planning point together.
+                outcomes = await asyncio.gather(
+                    *[
+                        self._execute_task(task)
+                        for task in batch
+                    ]
+                )
+
+                self._emit(
+                    event="batch_completed",
+                    task_count=len(outcomes),
+                )
+
+                # Store outcomes.
+                for outcome in outcomes:
+                    self.outcomes[
+                        outcome.task_id
+                    ] = outcome
+
+                # Give bounded Task outcomes back to the Supervisor.
+                self._add_outcomes_to_context(
+                    outcomes
+                )
+
+            if self.agent.result is None:
+                raise RuntimeError(
+                    "Supervisor completed without producing a result."
+                )
+
+            self._emit(
+                event="supervisor_completed",
             )
 
-        if self.agent.result is None:
-            raise RuntimeError(
-                "Supervisor completed without producing a result."
-            )
+            return self.agent.result
 
-        return self.agent.result
+        except asyncio.CancelledError:
+            raise
+
+        except Exception as exc:
+            self._emit(
+                event="supervisor_failed",
+                error=type(exc).__name__,
+            )
+            raise
 
     def _add_outcomes_to_context(
         self,
@@ -227,4 +258,25 @@ class Supervisor:
                     )
                 ),
             }
+        )
+
+    def _emit(
+        self,
+        event: str,
+        task_id: str | None = None,
+        **data: Any,
+    ) -> None:
+        """
+        Emit one Supervisor lifecycle event.
+        """
+
+        if self.trace is None:
+            return
+
+        self.trace.emit(
+            component="supervisor",
+            event=event,
+            request_id=self.request.request_id,
+            task_id=task_id,
+            **data,
         )

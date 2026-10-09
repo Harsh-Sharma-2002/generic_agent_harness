@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
 from openai.types.chat import ChatCompletionMessageParam
 
+from observability.tracer import RuntimeTracer
 from worker.base import BaseWorker
 from worker.clients.base import ToolClient
 from worker.llm_caller import LLMCaller
@@ -29,19 +31,29 @@ class GenericWorker(BaseWorker):
         max_iterations: int = 10,
         verbose: bool = False,
         local: bool = False,
+        worker_role: str = "worker",
+        trace: RuntimeTracer | None = None,
     ) -> None:
         self.tools = tools
         self.system_prompt = system_prompt
         self.allowed_tools = allowed_tools
         self.max_iterations = max_iterations
         self.verbose = verbose
+        self.worker_role = worker_role
+
+        # Existing detailed per-worker trace.
+        self.trace: list[dict[str, Any]] = []
+
+        # Shared KernelAI runtime observability trace.
+        self.runtime_trace = trace
 
         self.messages: list[ChatCompletionMessageParam] = []
-        self.trace: list[dict[str, Any]] = []
 
         self.available_tools: list[dict[str, Any]] = []
 
         self.request_id: str | None = None
+        self.task_id: str | None = None
+
         self.iteration = 0
 
         self.is_done = False
@@ -57,7 +69,10 @@ class GenericWorker(BaseWorker):
         event: str,
         data: Any = None,
     ) -> None:
-        """Record an execution event and optionally print it."""
+        """
+        Record a detailed per-worker execution event and optionally
+        print it.
+        """
 
         self.trace.append(
             {
@@ -87,10 +102,48 @@ class GenericWorker(BaseWorker):
         else:
             print(data)
 
+    def _emit(
+        self,
+        event: str,
+        **data: Any,
+    ) -> None:
+        """
+        Emit one structured KernelAI runtime event.
+        """
+
+        if self.runtime_trace is None:
+            return
+
+        self.runtime_trace.emit(
+            component="generic_worker",
+            event=event,
+            request_id=self.request_id,
+            task_id=self.task_id,
+            worker_role=self.worker_role,
+            **data,
+        )
+
+    def _bounded_error(
+        self,
+        exc: Exception,
+        limit: int = 300,
+    ) -> str:
+        """
+        Return a bounded error message suitable for observability.
+        """
+
+        message = str(exc)
+
+        if len(message) <= limit:
+            return message
+
+        return message[:limit] + "..."
+
     async def start(
         self,
         query: str,
         request_id: str,
+        task_id: str | None = None,
     ) -> None:
         """
         Initialize one GenericWorker execution.
@@ -102,6 +155,7 @@ class GenericWorker(BaseWorker):
             )
 
         self.request_id = request_id
+        self.task_id = task_id
 
         self.messages = [
             {
@@ -141,6 +195,10 @@ class GenericWorker(BaseWorker):
             ],
         )
 
+        self._emit(
+            event="worker_started",
+        )
+
     async def run_step(
         self,
     ) -> bool:
@@ -168,13 +226,40 @@ class GenericWorker(BaseWorker):
 
         self.iteration += 1
 
+        self._emit(
+            event="worker_step_started",
+            iteration=self.iteration,
+        )
+
         self._trace(
             f"ITERATION {self.iteration} - LLM CALL"
         )
 
-        response = await self.llm.call(
-            messages=self.messages,
-            tools=self.available_tools,
+        self._emit(
+            event="llm_call_started",
+            iteration=self.iteration,
+        )
+
+        try:
+            response = await self.llm.call(
+                messages=self.messages,
+                tools=self.available_tools,
+            )
+
+        except asyncio.CancelledError:
+            raise
+
+        except Exception as exc:
+            self._emit(
+                event="llm_call_failed",
+                iteration=self.iteration,
+                error=type(exc).__name__,
+            )
+            raise
+
+        self._emit(
+            event="llm_call_completed",
+            iteration=self.iteration,
         )
 
         if response.content:
@@ -183,9 +268,7 @@ class GenericWorker(BaseWorker):
                 response.content,
             )
 
-        # ---------------------------------------------------------
-        # Final response
-        # ---------------------------------------------------------
+        # Final response.
 
         if not response.tool_calls:
             if response.content and response.content.strip():
@@ -200,6 +283,15 @@ class GenericWorker(BaseWorker):
                     response.content,
                 )
 
+                self._emit(
+                    event="worker_step_completed",
+                    iteration=self.iteration,
+                )
+
+                self._emit(
+                    event="worker_completed",
+                )
+
                 return True
 
             raise RuntimeError(
@@ -207,9 +299,7 @@ class GenericWorker(BaseWorker):
                 f"for request {self.request_id!r}."
             )
 
-        # ---------------------------------------------------------
-        # Preserve assistant tool-call message
-        # ---------------------------------------------------------
+        # Preserve assistant tool-call message.
 
         assistant_message: ChatCompletionMessageParam = {
             "role": "assistant",
@@ -231,11 +321,11 @@ class GenericWorker(BaseWorker):
             assistant_message
         )
 
-        # ---------------------------------------------------------
-        # Execute every tool requested during this turn
-        # ---------------------------------------------------------
+        # Execute every tool requested during this turn.
 
         for tool_call in response.tool_calls:
+            tool_name = tool_call.function.name
+
             try:
                 arguments = json.loads(
                     tool_call.function.arguments
@@ -244,17 +334,39 @@ class GenericWorker(BaseWorker):
                 self._trace(
                     "TOOL CALL",
                     {
-                        "tool": tool_call.function.name,
+                        "tool": tool_name,
                         "arguments": arguments,
                     },
                 )
 
+                self._emit(
+                    event="tool_call_started",
+                    iteration=self.iteration,
+                    tool_name=tool_name,
+                )
+
                 tool_result = await self.tools.call_tool(
-                    name=tool_call.function.name,
+                    name=tool_name,
                     arguments=arguments,
                 )
 
+                self._emit(
+                    event="tool_call_completed",
+                    iteration=self.iteration,
+                    tool_name=tool_name,
+                )
+
             except json.JSONDecodeError as exc:
+                self._emit(
+                    event="tool_call_failed",
+                    iteration=self.iteration,
+                    tool_name=tool_name,
+                    error=type(exc).__name__,
+                    error_message=self._bounded_error(
+                        exc
+                    ),
+                )
+
                 tool_result = json.dumps(
                     {
                         "ok": False,
@@ -266,6 +378,16 @@ class GenericWorker(BaseWorker):
                 )
 
             except (ValueError, RuntimeError) as exc:
+                self._emit(
+                    event="tool_call_failed",
+                    iteration=self.iteration,
+                    tool_name=tool_name,
+                    error=type(exc).__name__,
+                    error_message=self._bounded_error(
+                        exc
+                    ),
+                )
+
                 tool_result = json.dumps(
                     {
                         "ok": False,
@@ -290,12 +412,18 @@ class GenericWorker(BaseWorker):
             f"ITERATION {self.iteration} COMPLETE"
         )
 
+        self._emit(
+            event="worker_step_completed",
+            iteration=self.iteration,
+        )
+
         return False
 
     async def run(
         self,
         query: str,
         request_id: str,
+        task_id: str | None = None,
     ) -> dict[str, Any]:
         """
         Execute continuously until the worker produces a final result.
@@ -304,14 +432,26 @@ class GenericWorker(BaseWorker):
         await self.start(
             query=query,
             request_id=request_id,
+            task_id=task_id,
         )
 
-        while not self.is_done:
-            await self.run_step()
+        try:
+            while not self.is_done:
+                await self.run_step()
 
-        if self.result is None:
-            raise RuntimeError(
-                "Worker completed without producing a result."
+            if self.result is None:
+                raise RuntimeError(
+                    "Worker completed without producing a result."
+                )
+
+            return self.result
+
+        except asyncio.CancelledError:
+            raise
+
+        except Exception as exc:
+            self._emit(
+                event="worker_failed",
+                error=type(exc).__name__,
             )
-
-        return self.result
+            raise

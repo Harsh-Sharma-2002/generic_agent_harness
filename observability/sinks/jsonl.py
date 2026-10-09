@@ -37,7 +37,7 @@ class JSONLSink:
             "event": event.event,
             "request_id": event.request_id,
             "task_id": event.task_id,
-            "data": event.data,
+            **event.data,
         }
 
         with self.path.open(
@@ -48,6 +48,8 @@ class JSONLSink:
                 json.dumps(
                     record,
                     default=str,
+                    ensure_ascii=False,
                 )
             )
+
             file.write("\n")

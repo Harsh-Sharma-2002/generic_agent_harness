@@ -66,11 +66,12 @@ def test_runtime_tracer_terminal_and_jsonl(
     assert record["request_id"] == "test-request-001"
     assert record["task_id"] is None
 
-    assert record["data"] == {
-        "system_requests": 5,
-        "active_requests": 3,
-        "waiting_requests": 2,
-    }
+    # Event metadata is flattened into the JSONL record.
+    assert record["system_requests"] == 5
+    assert record["active_requests"] == 3
+    assert record["waiting_requests"] == 2
+
+    assert "data" not in record
 
 
 def test_runtime_tracer_multiple_events(
@@ -120,22 +121,158 @@ def test_runtime_tracer_multiple_events(
         for line in lines
     ]
 
-    assert records[0]["event"] == "request_submitted"
-    assert records[1]["event"] == "request_admitted"
-    assert records[2]["event"] == "task_delegated"
+    assert [
+        record["event"]
+        for record in records
+    ] == [
+        "request_submitted",
+        "request_admitted",
+        "task_delegated",
+    ]
 
+    assert records[0]["request_id"] == "test-request-001"
+    assert records[0]["task_id"] is None
+
+    assert records[1]["request_id"] == "test-request-001"
+    assert records[1]["task_id"] is None
+
+    assert records[2]["request_id"] == "test-request-001"
     assert records[2]["task_id"] == "test-task-001"
-    assert records[2]["data"]["skills"] == [
+
+    assert records[2]["skills"] == [
         "text2sql"
     ]
+
+    assert all(
+        "data" not in record
+        for record in records
+    )
+
+
+def test_runtime_tracer_worker_metadata(
+    tmp_path: Path,
+) -> None:
+    """
+    GenericWorker metadata should be persisted as flattened
+    JSONL fields.
+    """
+
+    trace_path = tmp_path / "runtime_trace.jsonl"
+
+    tracer = RuntimeTracer(
+        sinks=[
+            JSONLSink(trace_path),
+        ]
+    )
+
+    tracer.emit(
+        component="generic_worker",
+        event="llm_call_started",
+        request_id="test-request-001",
+        task_id="test-task-001",
+        worker_role="task",
+        iteration=2,
+    )
+
+    lines = trace_path.read_text(
+        encoding="utf-8"
+    ).splitlines()
+
+    assert len(lines) == 1
+
+    record = json.loads(
+        lines[0]
+    )
+
+    assert record["component"] == "generic_worker"
+    assert record["event"] == "llm_call_started"
+    assert record["request_id"] == "test-request-001"
+    assert record["task_id"] == "test-task-001"
+    assert record["worker_role"] == "task"
+    assert record["iteration"] == 2
+
+    assert "data" not in record
+
+
+def test_runtime_tracer_tool_failure_metadata(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    """
+    Tool failure diagnostics should appear in both terminal and
+    persistent JSONL output.
+    """
+
+    trace_path = tmp_path / "runtime_trace.jsonl"
+
+    tracer = RuntimeTracer(
+        sinks=[
+            TerminalSink(),
+            JSONLSink(trace_path),
+        ]
+    )
+
+    tracer.emit(
+        component="generic_worker",
+        event="tool_call_failed",
+        request_id="test-request-005",
+        task_id="test-task-005",
+        worker_role="task",
+        iteration=3,
+        tool_name="web_search",
+        error="RuntimeError",
+        error_message="Web search backend failed.",
+    )
+
+    # Check terminal output.
+    captured = capsys.readouterr()
+
+    assert "GENERIC_WORKER" in captured.out
+    assert "test-request-005" in captured.out
+    assert "test-task-005" in captured.out
+    assert "TOOL_CALL_FAILED" in captured.out
+    assert "worker_role=task" in captured.out
+    assert "iteration=3" in captured.out
+    assert "tool_name=web_search" in captured.out
+    assert "error=RuntimeError" in captured.out
+    assert (
+        'error_message="Web search backend failed."'
+        in captured.out
+    )
+
+    # Check persistent JSONL output.
+    lines = trace_path.read_text(
+        encoding="utf-8"
+    ).splitlines()
+
+    assert len(lines) == 1
+
+    record = json.loads(
+        lines[0]
+    )
+
+    assert record["component"] == "generic_worker"
+    assert record["event"] == "tool_call_failed"
+    assert record["request_id"] == "test-request-005"
+    assert record["task_id"] == "test-task-005"
+    assert record["worker_role"] == "task"
+    assert record["iteration"] == 3
+    assert record["tool_name"] == "web_search"
+    assert record["error"] == "RuntimeError"
+    assert (
+        record["error_message"]
+        == "Web search backend failed."
+    )
+
+    assert "data" not in record
 
 
 def test_runtime_tracer_sink_failure_isolated(
     tmp_path: Path,
 ) -> None:
     """
-    Failure in one sink must not prevent other sinks from receiving
-    the event or propagate into KernelAI execution.
+    A failing sink must not prevent other sinks from receiving
+    the same runtime event.
     """
 
     class FailingSink:
@@ -156,7 +293,6 @@ def test_runtime_tracer_sink_failure_isolated(
         ]
     )
 
-    # This must not raise.
     tracer.emit(
         component="orchestrator",
         event="request_submitted",
@@ -176,39 +312,4 @@ def test_runtime_tracer_sink_failure_isolated(
     )
 
     assert record["event"] == "request_submitted"
-
-
-def test_runtime_tracer_task_event(
-    tmp_path: Path,
-) -> None:
-    """
-    Task-scoped events should preserve both Request and Task
-    correlation IDs.
-    """
-
-    trace_path = tmp_path / "runtime_trace.jsonl"
-
-    tracer = RuntimeTracer(
-        sinks=[
-            JSONLSink(trace_path),
-        ]
-    )
-
-    tracer.emit(
-        component="task_executor",
-        event="task_started",
-        request_id="test-request-001",
-        task_id="test-task-001",
-    )
-
-    record = json.loads(
-        trace_path.read_text(
-            encoding="utf-8"
-        ).strip()
-    )
-
-    assert record["component"] == "task_executor"
-    assert record["event"] == "task_started"
     assert record["request_id"] == "test-request-001"
-    assert record["task_id"] == "test-task-001"
-

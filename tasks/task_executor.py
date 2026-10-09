@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
+from observability.tracer import RuntimeTracer
 from skills.registry import get_skill
 from tasks.outcome import TaskOutcome
 from tasks.task import Task, TaskStatus
@@ -31,10 +33,12 @@ class TaskExecutor:
         max_iterations: int = 10,
         verbose: bool = False,
         local: bool = False,
+        trace: RuntimeTracer | None = None,
     ) -> None:
         self.max_iterations = max_iterations
         self.verbose = verbose
         self.local = local
+        self.trace = trace
 
         self.task_worker_role = TASK_WORKER_ROLE_PATH.read_text(
             encoding="utf-8"
@@ -59,18 +63,18 @@ class TaskExecutor:
                 f"Task {task.task_id!r} has no assigned skills."
             )
 
-
         skills = [
             get_skill(skill_name)
             for skill_name in task.skill_names
         ]
 
-        # Build worker instructions
+        # Build worker instructions.
+        #
         # Role:
         #   Defines what this GenericWorker is responsible for.
+        #
         # Skills:
         #   Define the specialized behavior needed for this Task.
-        
 
         skill_prompts = [
             skill.load()
@@ -84,12 +88,10 @@ class TaskExecutor:
             ]
         )
 
-       
-        # Build capability boundary
-        
+        # Build capability boundary.
+        #
         # A multi-skill Task receives the union of the tools granted
         # by all of its selected skills.
-        
 
         allowed_tools: set[str] = set()
 
@@ -98,9 +100,7 @@ class TaskExecutor:
                 skill.allowed_tools
             )
 
-        # ---------------------------------------------------------
-        # Create isolated Task Worker
-        # ---------------------------------------------------------
+        # Create isolated Task Worker.
 
         worker = GenericWorker(
             tools=MCPToolClient(),
@@ -109,22 +109,23 @@ class TaskExecutor:
             max_iterations=self.max_iterations,
             verbose=self.verbose,
             local=self.local,
+            trace=self.trace,
+            worker_role="task",
         )
 
         task.status = TaskStatus.RUNNING
-
-       
 
         try:
             result = await worker.run(
                 query=task.query,
                 request_id=task.request_id,
+                task_id=task.task_id,
             )
 
         except (ValueError, RuntimeError) as exc:
             task.status = TaskStatus.FAILED
 
-            return TaskOutcome(
+            outcome = TaskOutcome(
                 request_id=task.request_id,
                 task_id=task.task_id,
                 status=TaskStatus.FAILED,
@@ -132,13 +133,48 @@ class TaskExecutor:
                 error=str(exc),
             )
 
+            self._emit(
+                event="task_failed",
+                task=task,
+                error=type(exc).__name__,
+            )
+
+            return outcome
 
         task.status = TaskStatus.COMPLETED
 
-        return TaskOutcome(
+        outcome = TaskOutcome(
             request_id=task.request_id,
             task_id=task.task_id,
             status=TaskStatus.COMPLETED,
             result=result,
             error=None,
+        )
+
+        self._emit(
+            event="task_completed",
+            task=task,
+        )
+
+        return outcome
+
+    def _emit(
+        self,
+        event: str,
+        task: Task,
+        **data: Any,
+    ) -> None:
+        """
+        Emit one TaskExecutor lifecycle event.
+        """
+
+        if self.trace is None:
+            return
+
+        self.trace.emit(
+            component="task_executor",
+            event=event,
+            request_id=task.request_id,
+            task_id=task.task_id,
+            **data,
         )

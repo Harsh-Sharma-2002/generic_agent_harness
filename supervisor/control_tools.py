@@ -118,9 +118,7 @@ class SupervisorControlTools:
             "skills"
         )
 
-        # ---------------------------------------------------------
-        # Validate task instruction
-        # ---------------------------------------------------------
+        # Validate task instruction.
 
         if not isinstance(
             task_query,
@@ -137,9 +135,7 @@ class SupervisorControlTools:
                 "delegate_task requires a non-empty 'task'."
             )
 
-        # ---------------------------------------------------------
-        # Validate skill list
-        # ---------------------------------------------------------
+        # Validate skill list.
 
         if not isinstance(
             skill_names,
@@ -178,9 +174,7 @@ class SupervisorControlTools:
                     skill_name
                 )
 
-        # ---------------------------------------------------------
-        # Create Task
-        # ---------------------------------------------------------
+        # Create Task.
 
         task_id = (
             f"task_{uuid.uuid4().hex}"
@@ -201,6 +195,14 @@ class SupervisorControlTools:
         # Current execution batch.
         self.supervisor.pending_tasks.append(
             task
+        )
+
+        # Task creation and registration succeeded.
+        self.supervisor._emit(
+            event="task_delegated",
+            task_id=task.task_id,
+            skills=task.skill_names,
+            task=task_query,
         )
 
         # The model only needs the identifier.
