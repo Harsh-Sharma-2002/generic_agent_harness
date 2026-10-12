@@ -2,10 +2,20 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
+from observability.sinks.jsonl import JSONLSink
+from observability.sinks.terminal import TerminalSink
+from observability.tracer import RuntimeTracer
 from orchestrator.orchestrator import Orchestrator
 from tasks.request import Request
+
+
+TRACE_PATH = Path(
+    "tests/parallel_50_trace.jsonl"
+)
 
 
 @pytest.mark.asyncio
@@ -18,13 +28,42 @@ async def test_single_request_50_parallel_tasks() -> None:
     async fan-out can be inspected through observability traces.
     """
 
+    # --------------------------------------------------------
+    # Clean previous benchmark trace
+    # --------------------------------------------------------
+
+    if TRACE_PATH.exists():
+        TRACE_PATH.unlink()
+
+    # --------------------------------------------------------
+    # Observability
+    # --------------------------------------------------------
+
+    tracer = RuntimeTracer(
+        sinks=[
+            TerminalSink(),
+            JSONLSink(
+                TRACE_PATH
+            ),
+        ]
+    )
+
+    # --------------------------------------------------------
+    # Runtime
+    # --------------------------------------------------------
+
     orchestrator = Orchestrator(
         supervisor_max_iterations=10,
         max_concurrent_requests=1,
         max_concurrent_tasks=50,
         verbose=False,
         local=False,
+        trace=tracer,
     )
+
+    # --------------------------------------------------------
+    # Request
+    # --------------------------------------------------------
 
     request = Request(
         request_id="parallel-request-050",
@@ -97,8 +136,20 @@ IMPORTANT:
 """.strip(),
     )
 
+    # --------------------------------------------------------
+    # Execute
+    # --------------------------------------------------------
+
     result = await orchestrator.submit(
         request
     )
 
+    # --------------------------------------------------------
+    # Validate
+    # --------------------------------------------------------
+
     assert result is not None
+
+    assert TRACE_PATH.exists()
+
+    assert TRACE_PATH.stat().st_size > 0
