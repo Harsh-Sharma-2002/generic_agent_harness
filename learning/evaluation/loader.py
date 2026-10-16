@@ -1,10 +1,18 @@
-"""Load persisted KernelAI trace events for offline evaluation."""
+"""Load KernelAI traces into structured evaluation records."""
 
 from __future__ import annotations
 
 import json
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
+
+from learning.evaluation.execution import (
+    ExecutionRecord,
+    TaskExecutionRecord,
+    ToolCallRecord,
+)
+from learning.models import TracePlane
 
 
 TRACE_ROOT = (
@@ -14,14 +22,39 @@ TRACE_ROOT = (
 )
 
 
-def load_trace_file(
+def load_execution(
+    path: Path,
+) -> ExecutionRecord:
+    """
+    Load one JSONL trace file and convert it into an
+    evaluation-ready ExecutionRecord.
+
+    The trace file must contain events belonging to exactly
+    one KernelAI Request.
+    """
+
+    events = _load_events(path)
+
+    if not events:
+        raise ValueError(
+            f"Trace file contains no events: {path}"
+        )
+
+    return _build_execution(events)
+
+
+def get_trace_directory(
+    plane: TracePlane,
+) -> Path:
+    """Return the trace directory for one execution plane."""
+
+    return TRACE_ROOT / plane.value
+
+
+def _load_events(
     path: Path,
 ) -> list[dict[str, Any]]:
-    """
-    Load one KernelAI JSONL trace file.
-
-    Each non-empty line must contain one serialized RuntimeEvent.
-    """
+    """Load raw RuntimeEvents from one JSONL trace file."""
 
     if not path.exists():
         raise FileNotFoundError(
@@ -50,10 +83,11 @@ def load_trace_file(
 
             try:
                 event = json.loads(line)
+
             except json.JSONDecodeError as exc:
                 raise ValueError(
-                    f"Invalid JSON in trace file "
-                    f"{path} at line {line_number}."
+                    f"Invalid JSON in {path} "
+                    f"at line {line_number}."
                 ) from exc
 
             if not isinstance(event, dict):
@@ -67,20 +101,482 @@ def load_trace_file(
     return events
 
 
-def get_trace_directory(
-    plane: str,
-) -> Path:
-    """
-    Return the trace directory for one execution plane.
-    """
+def _build_execution(
+    events: list[dict[str, Any]],
+) -> ExecutionRecord:
+    """Convert raw RuntimeEvents into one ExecutionRecord."""
 
-    if plane not in {
-        "production",
-        "learning",
-        "evaluation",
-    }:
+    request_ids = {
+        event.get("request_id")
+        for event in events
+        if event.get("request_id") is not None
+    }
+
+    if len(request_ids) != 1:
         raise ValueError(
-            f"Unknown trace plane: {plane!r}."
+            "Trace must contain events from exactly one request."
         )
 
-    return TRACE_ROOT / plane
+    request_id = next(iter(request_ids))
+
+    task_events: dict[str, list[dict[str, Any]]] = (
+        defaultdict(list)
+    )
+
+    supervisor_events: list[dict[str, Any]] = []
+
+    for event in events:
+        task_id = event.get("task_id")
+
+        if task_id is None:
+            supervisor_events.append(event)
+            continue
+
+        task_events[str(task_id)].append(event)
+
+    tasks = tuple(
+        _build_task(
+            task_id=task_id,
+            events=current_events,
+        )
+        for task_id, current_events in task_events.items()
+    )
+
+    return ExecutionRecord(
+        request_id=str(request_id),
+        query=_extract_query(events),
+        status=_request_status(events),
+        final_answer=_extract_final_answer(events),
+        duration_seconds=_duration_between(
+            events,
+            start_event="request_started",
+            terminal_events={
+                "request_completed",
+                "request_failed",
+            },
+        ),
+        tasks=tasks,
+        supervisor_llm_calls=_count_events(
+            supervisor_events,
+            "llm_call_completed",
+        ),
+        input_tokens=_sum_usage(
+            events,
+            "input_tokens",
+        ),
+        output_tokens=_sum_usage(
+            events,
+            "output_tokens",
+        ),
+    )
+
+
+def _build_task(
+    task_id: str,
+    events: list[dict[str, Any]],
+) -> TaskExecutionRecord:
+    """Build one Task execution from its RuntimeEvents."""
+
+    return TaskExecutionRecord(
+        task_id=task_id,
+        description=_extract_task_description(events),
+        skills=_extract_task_skills(events),
+        status=_task_status(events),
+        llm_calls=_count_events(
+            events,
+            "llm_call_completed",
+        ),
+        tool_calls=_build_tool_calls(events),
+        duration_seconds=_duration_between(
+            events,
+            start_event="task_started",
+            terminal_events={
+                "task_completed",
+                "task_failed",
+            },
+        ),
+    )
+
+
+def _build_tool_calls(
+    events: list[dict[str, Any]],
+) -> tuple[ToolCallRecord, ...]:
+    """
+    Pair tool-start and terminal events using tool_call_id.
+    """
+
+    started: dict[str, dict[str, Any]] = {}
+    records: list[ToolCallRecord] = []
+
+    for event in events:
+        event_name = event.get("event")
+        data = event.get("data")
+
+        if not isinstance(data, dict):
+            continue
+
+        tool_call_id = data.get("tool_call_id")
+
+        if not isinstance(tool_call_id, str):
+            continue
+
+        if event_name == "tool_call_started":
+            started[tool_call_id] = event
+            continue
+
+        if event_name not in {
+            "tool_call_completed",
+            "tool_call_failed",
+        }:
+            continue
+
+        start_event = started.get(tool_call_id)
+
+        if start_event is None:
+            continue
+
+        start_data = start_event.get("data")
+
+        if not isinstance(start_data, dict):
+            continue
+
+        records.append(
+            ToolCallRecord(
+                tool_call_id=tool_call_id,
+                tool_name=str(
+                    data.get(
+                        "tool_name",
+                        start_data.get(
+                            "tool_name",
+                            "",
+                        ),
+                    )
+                ),
+                arguments=start_data.get(
+                    "arguments",
+                    start_data.get(
+                        "arguments_raw",
+                    ),
+                ),
+                result=data.get(
+                    "result_preview",
+                ),
+                success=(
+                    event_name
+                    == "tool_call_completed"
+                ),
+                duration_seconds=_optional_float(
+                    data.get(
+                        "duration_seconds",
+                    )
+                ),
+                iteration=_optional_int(
+                    data.get(
+                        "iteration",
+                    )
+                ),
+                error=_optional_string(
+                    data.get(
+                        "error_message",
+                    )
+                ),
+            )
+        )
+
+    return tuple(records)
+
+
+def _extract_query(
+    events: list[dict[str, Any]],
+) -> str:
+    """
+    Extract the original Request query.
+
+    Supports either a direct query field or query stored in
+    the event data payload.
+    """
+
+    for event in events:
+        if event.get("event") != "request_started":
+            continue
+
+        query = event.get("query")
+
+        if isinstance(query, str):
+            return query
+
+        data = event.get("data")
+
+        if isinstance(data, dict):
+            query = data.get("query")
+
+            if isinstance(query, str):
+                return query
+
+    return ""
+
+
+def _extract_final_answer(
+    events: list[dict[str, Any]],
+) -> Any | None:
+    """Extract the final result from REQUEST_COMPLETED."""
+
+    for event in reversed(events):
+        if event.get("event") != "request_completed":
+            continue
+
+        result = event.get("result")
+
+        if result is not None:
+            return result
+
+        data = event.get("data")
+
+        if isinstance(data, dict):
+            return data.get("result")
+
+    return None
+
+
+def _extract_task_description(
+    events: list[dict[str, Any]],
+) -> str:
+    """Extract the Task instruction from TASK_DELEGATED."""
+
+    for event in events:
+        if event.get("event") != "task_delegated":
+            continue
+
+        data = event.get("data")
+
+        if not isinstance(data, dict):
+            continue
+
+        for key in (
+            "task",
+            "query",
+            "description",
+        ):
+            value = data.get(key)
+
+            if isinstance(value, str):
+                return value
+
+    return ""
+
+
+def _extract_task_skills(
+    events: list[dict[str, Any]],
+) -> tuple[str, ...]:
+    """Extract skills assigned during TASK_DELEGATED."""
+
+    for event in events:
+        if event.get("event") != "task_delegated":
+            continue
+
+        data = event.get("data")
+
+        if not isinstance(data, dict):
+            continue
+
+        skills = data.get("skills")
+
+        if isinstance(skills, list):
+            return tuple(
+                str(skill)
+                for skill in skills
+            )
+
+    return ()
+
+
+def _request_status(
+    events: list[dict[str, Any]],
+) -> str:
+    """Determine terminal Request status."""
+
+    if _has_event(
+        events,
+        "request_completed",
+    ):
+        return "completed"
+
+    if _has_event(
+        events,
+        "request_failed",
+    ):
+        return "failed"
+
+    return "unknown"
+
+
+def _task_status(
+    events: list[dict[str, Any]],
+) -> str:
+    """Determine terminal Task status."""
+
+    if _has_event(
+        events,
+        "task_completed",
+    ):
+        return "completed"
+
+    if _has_event(
+        events,
+        "task_failed",
+    ):
+        return "failed"
+
+    return "unknown"
+
+
+def _duration_between(
+    events: list[dict[str, Any]],
+    start_event: str,
+    terminal_events: set[str],
+) -> float | None:
+    """
+    Calculate duration from persisted event timestamps.
+
+    Returns None when timestamps are unavailable or cannot
+    be interpreted safely.
+    """
+
+    start_timestamp: float | None = None
+    end_timestamp: float | None = None
+
+    for event in events:
+        event_name = event.get("event")
+
+        if (
+            event_name == start_event
+            and start_timestamp is None
+        ):
+            start_timestamp = _timestamp_seconds(
+                event.get("timestamp")
+            )
+
+        if event_name in terminal_events:
+            timestamp = _timestamp_seconds(
+                event.get("timestamp")
+            )
+
+            if timestamp is not None:
+                end_timestamp = timestamp
+
+    if (
+        start_timestamp is None
+        or end_timestamp is None
+    ):
+        return None
+
+    duration = end_timestamp - start_timestamp
+
+    if duration < 0:
+        return None
+
+    return duration
+
+
+def _timestamp_seconds(
+    value: Any,
+) -> float | None:
+    """
+    Convert a numeric timestamp to seconds.
+
+    ISO datetime parsing can be added once the persisted
+    RuntimeEvent timestamp representation is confirmed.
+    """
+
+    if isinstance(value, (int, float)):
+        return float(value)
+
+    return None
+
+
+def _sum_usage(
+    events: list[dict[str, Any]],
+    key: str,
+) -> int | None:
+    """Sum token usage recorded in event data."""
+
+    total = 0
+    found = False
+
+    for event in events:
+        data = event.get("data")
+
+        if not isinstance(data, dict):
+            continue
+
+        value = data.get(key)
+
+        if (
+            isinstance(value, int)
+            and not isinstance(value, bool)
+        ):
+            total += value
+            found = True
+
+    if not found:
+        return None
+
+    return total
+
+
+def _count_events(
+    events: list[dict[str, Any]],
+    event_name: str,
+) -> int:
+    """Count occurrences of one RuntimeEvent type."""
+
+    return sum(
+        1
+        for event in events
+        if event.get("event") == event_name
+    )
+
+
+def _has_event(
+    events: list[dict[str, Any]],
+    event_name: str,
+) -> bool:
+    """Return whether an event type exists."""
+
+    return any(
+        event.get("event") == event_name
+        for event in events
+    )
+
+
+def _optional_float(
+    value: Any,
+) -> float | None:
+    if (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+    ):
+        return float(value)
+
+    return None
+
+
+def _optional_int(
+    value: Any,
+) -> int | None:
+    if (
+        isinstance(value, int)
+        and not isinstance(value, bool)
+    ):
+        return value
+
+    return None
+
+
+def _optional_string(
+    value: Any,
+) -> str | None:
+    if isinstance(value, str):
+        return value
+
+    return None
