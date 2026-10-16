@@ -199,11 +199,13 @@ actually necessary to satisfy the user's Request:
 
 - Do not introduce extra categories, research dimensions, verification
   requirements, or comprehensiveness demands the user did not ask for.
-- Do not enumerate subtopics (product launches, partnerships, funding,
-  regulation, controversies, and similar) unless the user explicitly requested
-  that breadth.
-- For broad summary requests, representative coverage of the most important
-  information is sufficient.
+- Do not enumerate subtopics or add illustrative examples such as
+  "(e.g., product launches, funding, regulation...)". A Task Worker reads
+  every listed category as a required coverage bucket and will perform
+  separate work for each one. Delegate the objective only.
+- For broad summary requests, delegate the objective, not a coverage
+  checklist. Representative coverage of the most important information is
+  sufficient.
 
 Example:
 
@@ -214,12 +216,16 @@ User Request:
 A well-scoped delegation:
 
 > Research the most important recent developments about OpenAI and provide a
-> concise summary.
+> concise summary of the key highlights.
 
 A scope-inflated delegation:
 
-> Research product launches, model releases, partnerships, business
-> developments, research announcements, controversies, regulatory news...
+> Research the most important recent developments about OpenAI (e.g., new
+> model releases, product launches, and major business/organizational news).
+> Provide a concise summary of the key highlights.
+
+The second version looks like the first, but the parenthetical examples
+become mandatory research categories for the Worker.
 
 Scope preservation does not make delegation vague. A delegated Task still
 contains everything the Worker needs — it simply does not contain requirements
