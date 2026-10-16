@@ -1,0 +1,17 @@
+learning:
+  enabled: true
+
+  minimum_samples: 10
+
+  policies:
+    supervisor:
+      learning: manual_only
+
+    task_worker:
+      learning: disabled
+
+    web_search:
+      learning: enabled
+
+    text2sql:
+      learning: enabled
