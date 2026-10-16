@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -119,11 +120,14 @@ def _build_execution(
 
     request_id = next(iter(request_ids))
 
-    task_events: dict[str, list[dict[str, Any]]] = (
-        defaultdict(list)
-    )
+    task_events: dict[
+        str,
+        list[dict[str, Any]],
+    ] = defaultdict(list)
 
-    supervisor_events: list[dict[str, Any]] = []
+    supervisor_events: list[
+        dict[str, Any]
+    ] = []
 
     for event in events:
         task_id = event.get("task_id")
@@ -132,14 +136,17 @@ def _build_execution(
             supervisor_events.append(event)
             continue
 
-        task_events[str(task_id)].append(event)
+        task_events[str(task_id)].append(
+            event
+        )
 
     tasks = tuple(
         _build_task(
             task_id=task_id,
             events=current_events,
         )
-        for task_id, current_events in task_events.items()
+        for task_id, current_events
+        in task_events.items()
     )
 
     return ExecutionRecord(
@@ -149,16 +156,16 @@ def _build_execution(
         final_answer=_extract_final_answer(events),
         duration_seconds=_duration_between(
             events,
-            start_event="request_started",
+            start_event="request_submitted",
             terminal_events={
                 "request_completed",
                 "request_failed",
+                "request_cancelled",
             },
         ),
         tasks=tasks,
-        supervisor_llm_calls=_count_events(
-            supervisor_events,
-            "llm_call_completed",
+        supervisor_llm_calls=_count_supervisor_llm_calls(
+            supervisor_events
         ),
         input_tokens=_sum_usage(
             events,
@@ -179,14 +186,21 @@ def _build_task(
 
     return TaskExecutionRecord(
         task_id=task_id,
-        description=_extract_task_description(events),
-        skills=_extract_task_skills(events),
-        status=_task_status(events),
-        llm_calls=_count_events(
-            events,
-            "llm_call_completed",
+        description=_extract_task_description(
+            events
         ),
-        tool_calls=_build_tool_calls(events),
+        skills=_extract_task_skills(
+            events
+        ),
+        status=_task_status(
+            events
+        ),
+        llm_calls=_count_task_llm_calls(
+            events
+        ),
+        tool_calls=_build_tool_calls(
+            events
+        ),
         duration_seconds=_duration_between(
             events,
             start_event="task_started",
@@ -203,25 +217,41 @@ def _build_tool_calls(
 ) -> tuple[ToolCallRecord, ...]:
     """
     Pair tool-start and terminal events using tool_call_id.
+
+    JSONLSink flattens RuntimeEvent.data into the top-level
+    JSON object, so tool metadata is read directly from each
+    event dictionary.
     """
 
-    started: dict[str, dict[str, Any]] = {}
-    records: list[ToolCallRecord] = []
+    started: dict[
+        str,
+        dict[str, Any],
+    ] = {}
+
+    records: list[
+        ToolCallRecord
+    ] = []
 
     for event in events:
-        event_name = event.get("event")
-        data = event.get("data")
+        event_name = event.get(
+            "event"
+        )
 
-        if not isinstance(data, dict):
-            continue
+        tool_call_id = event.get(
+            "tool_call_id"
+        )
 
-        tool_call_id = data.get("tool_call_id")
-
-        if not isinstance(tool_call_id, str):
+        if not isinstance(
+            tool_call_id,
+            str,
+        ):
             continue
 
         if event_name == "tool_call_started":
-            started[tool_call_id] = event
+            started[
+                tool_call_id
+            ] = event
+
             continue
 
         if event_name not in {
@@ -230,54 +260,51 @@ def _build_tool_calls(
         }:
             continue
 
-        start_event = started.get(tool_call_id)
+        start_event = started.get(
+            tool_call_id
+        )
 
         if start_event is None:
-            continue
-
-        start_data = start_event.get("data")
-
-        if not isinstance(start_data, dict):
             continue
 
         records.append(
             ToolCallRecord(
                 tool_call_id=tool_call_id,
                 tool_name=str(
-                    data.get(
+                    event.get(
                         "tool_name",
-                        start_data.get(
+                        start_event.get(
                             "tool_name",
                             "",
                         ),
                     )
                 ),
-                arguments=start_data.get(
+                arguments=start_event.get(
                     "arguments",
-                    start_data.get(
+                    start_event.get(
                         "arguments_raw",
                     ),
                 ),
-                result=data.get(
-                    "result_preview",
+                result=event.get(
+                    "result_preview"
                 ),
                 success=(
                     event_name
                     == "tool_call_completed"
                 ),
                 duration_seconds=_optional_float(
-                    data.get(
-                        "duration_seconds",
+                    event.get(
+                        "duration_seconds"
                     )
                 ),
                 iteration=_optional_int(
-                    data.get(
-                        "iteration",
+                    event.get(
+                        "iteration"
                     )
                 ),
                 error=_optional_string(
-                    data.get(
-                        "error_message",
+                    event.get(
+                        "error_message"
                     )
                 ),
             )
@@ -292,26 +319,18 @@ def _extract_query(
     """
     Extract the original Request query.
 
-    Supports either a direct query field or query stored in
-    the event data payload.
+    The query is read from the persisted request_submitted
+    event. Returns an empty string when the trace does not
+    contain one.
     """
 
     for event in events:
-        if event.get("event") != "request_started":
-            continue
-
-        query = event.get("query")
+        query = event.get(
+            "query"
+        )
 
         if isinstance(query, str):
             return query
-
-        data = event.get("data")
-
-        if isinstance(data, dict):
-            query = data.get("query")
-
-            if isinstance(query, str):
-                return query
 
     return ""
 
@@ -319,21 +338,23 @@ def _extract_query(
 def _extract_final_answer(
     events: list[dict[str, Any]],
 ) -> Any | None:
-    """Extract the final result from REQUEST_COMPLETED."""
+    """
+    Extract the final Request result when present in the trace.
+
+    The current orchestrator REQUEST_COMPLETED event does not
+    include the result, so this may legitimately return None.
+    """
 
     for event in reversed(events):
-        if event.get("event") != "request_completed":
+        if (
+            event.get("event")
+            != "request_completed"
+        ):
             continue
 
-        result = event.get("result")
-
-        if result is not None:
-            return result
-
-        data = event.get("data")
-
-        if isinstance(data, dict):
-            return data.get("result")
+        return event.get(
+            "result"
+        )
 
     return None
 
@@ -341,15 +362,13 @@ def _extract_final_answer(
 def _extract_task_description(
     events: list[dict[str, Any]],
 ) -> str:
-    """Extract the Task instruction from TASK_DELEGATED."""
+    """Extract the delegated Task instruction."""
 
     for event in events:
-        if event.get("event") != "task_delegated":
-            continue
-
-        data = event.get("data")
-
-        if not isinstance(data, dict):
+        if (
+            event.get("event")
+            != "task_delegated"
+        ):
             continue
 
         for key in (
@@ -357,9 +376,14 @@ def _extract_task_description(
             "query",
             "description",
         ):
-            value = data.get(key)
+            value = event.get(
+                key
+            )
 
-            if isinstance(value, str):
+            if isinstance(
+                value,
+                str,
+            ):
                 return value
 
     return ""
@@ -371,17 +395,20 @@ def _extract_task_skills(
     """Extract skills assigned during TASK_DELEGATED."""
 
     for event in events:
-        if event.get("event") != "task_delegated":
+        if (
+            event.get("event")
+            != "task_delegated"
+        ):
             continue
 
-        data = event.get("data")
+        skills = event.get(
+            "skills"
+        )
 
-        if not isinstance(data, dict):
-            continue
-
-        skills = data.get("skills")
-
-        if isinstance(skills, list):
+        if isinstance(
+            skills,
+            list,
+        ):
             return tuple(
                 str(skill)
                 for skill in skills
@@ -397,15 +424,33 @@ def _request_status(
 
     if _has_event(
         events,
+        "request_failed",
+    ):
+        return "failed"
+
+    if _has_event(
+        events,
+        "request_cancelled",
+    ):
+        return "cancelled"
+
+    if _has_event(
+        events,
         "request_completed",
     ):
         return "completed"
 
     if _has_event(
         events,
-        "request_failed",
+        "request_admitted",
     ):
-        return "failed"
+        return "running"
+
+    if _has_event(
+        events,
+        "request_submitted",
+    ):
+        return "submitted"
 
     return "unknown"
 
@@ -417,17 +462,77 @@ def _task_status(
 
     if _has_event(
         events,
+        "task_failed",
+    ):
+        return "failed"
+
+    if _has_event(
+        events,
         "task_completed",
     ):
         return "completed"
 
     if _has_event(
         events,
-        "task_failed",
+        "task_started",
     ):
-        return "failed"
+        return "running"
+
+    if _has_event(
+        events,
+        "task_waiting",
+    ):
+        return "waiting"
+
+    if _has_event(
+        events,
+        "task_delegated",
+    ):
+        return "delegated"
 
     return "unknown"
+
+
+def _count_supervisor_llm_calls(
+    events: list[dict[str, Any]],
+) -> int:
+    """
+    Count completed LLM calls made by the Supervisor worker.
+    """
+
+    return sum(
+        1
+        for event in events
+        if (
+            event.get("component")
+            == "generic_worker"
+            and event.get("event")
+            == "llm_call_completed"
+            and event.get("worker_role")
+            == "supervisor"
+        )
+    )
+
+
+def _count_task_llm_calls(
+    events: list[dict[str, Any]],
+) -> int:
+    """
+    Count completed LLM calls made by one Task Worker.
+    """
+
+    return sum(
+        1
+        for event in events
+        if (
+            event.get("component")
+            == "generic_worker"
+            and event.get("event")
+            == "llm_call_completed"
+            and event.get("worker_role")
+            == "task"
+        )
+    )
 
 
 def _duration_between(
@@ -436,29 +541,33 @@ def _duration_between(
     terminal_events: set[str],
 ) -> float | None:
     """
-    Calculate duration from persisted event timestamps.
-
-    Returns None when timestamps are unavailable or cannot
-    be interpreted safely.
+    Calculate duration between lifecycle events using the
+    ISO-8601 timestamps persisted by JSONLSink.
     """
 
-    start_timestamp: float | None = None
-    end_timestamp: float | None = None
+    start_timestamp: datetime | None = None
+    end_timestamp: datetime | None = None
 
     for event in events:
-        event_name = event.get("event")
+        event_name = event.get(
+            "event"
+        )
 
         if (
             event_name == start_event
             and start_timestamp is None
         ):
-            start_timestamp = _timestamp_seconds(
-                event.get("timestamp")
+            start_timestamp = _parse_timestamp(
+                event.get(
+                    "timestamp"
+                )
             )
 
         if event_name in terminal_events:
-            timestamp = _timestamp_seconds(
-                event.get("timestamp")
+            timestamp = _parse_timestamp(
+                event.get(
+                    "timestamp"
+                )
             )
 
             if timestamp is not None:
@@ -470,7 +579,10 @@ def _duration_between(
     ):
         return None
 
-    duration = end_timestamp - start_timestamp
+    duration = (
+        end_timestamp
+        - start_timestamp
+    ).total_seconds()
 
     if duration < 0:
         return None
@@ -478,38 +590,44 @@ def _duration_between(
     return duration
 
 
-def _timestamp_seconds(
+def _parse_timestamp(
     value: Any,
-) -> float | None:
-    """
-    Convert a numeric timestamp to seconds.
+) -> datetime | None:
+    """Parse one persisted ISO-8601 RuntimeEvent timestamp."""
 
-    ISO datetime parsing can be added once the persisted
-    RuntimeEvent timestamp representation is confirmed.
-    """
+    if not isinstance(
+        value,
+        str,
+    ):
+        return None
 
-    if isinstance(value, (int, float)):
-        return float(value)
+    try:
+        return datetime.fromisoformat(
+            value
+        )
 
-    return None
+    except ValueError:
+        return None
 
 
 def _sum_usage(
     events: list[dict[str, Any]],
     key: str,
 ) -> int | None:
-    """Sum token usage recorded in event data."""
+    """
+    Sum token usage when token fields are present.
+
+    Missing usage remains None rather than being represented
+    as zero.
+    """
 
     total = 0
     found = False
 
     for event in events:
-        data = event.get("data")
-
-        if not isinstance(data, dict):
-            continue
-
-        value = data.get(key)
+        value = event.get(
+            key
+        )
 
         if (
             isinstance(value, int)
@@ -533,7 +651,9 @@ def _count_events(
     return sum(
         1
         for event in events
-        if event.get("event") == event_name
+        if event.get(
+            "event"
+        ) == event_name
     )
 
 
@@ -544,7 +664,9 @@ def _has_event(
     """Return whether an event type exists."""
 
     return any(
-        event.get("event") == event_name
+        event.get(
+            "event"
+        ) == event_name
         for event in events
     )
 
@@ -553,8 +675,14 @@ def _optional_float(
     value: Any,
 ) -> float | None:
     if (
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
+        isinstance(
+            value,
+            (int, float),
+        )
+        and not isinstance(
+            value,
+            bool,
+        )
     ):
         return float(value)
 
@@ -565,8 +693,14 @@ def _optional_int(
     value: Any,
 ) -> int | None:
     if (
-        isinstance(value, int)
-        and not isinstance(value, bool)
+        isinstance(
+            value,
+            int,
+        )
+        and not isinstance(
+            value,
+            bool,
+        )
     ):
         return value
 
@@ -576,7 +710,10 @@ def _optional_int(
 def _optional_string(
     value: Any,
 ) -> str | None:
-    if isinstance(value, str):
+    if isinstance(
+        value,
+        str,
+    ):
         return value
 
     return None

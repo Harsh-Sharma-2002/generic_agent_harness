@@ -72,6 +72,7 @@ class MetricName(str, Enum):
 
     SCOPE_OVERREACH = "scope_overreach"
     SUFFICIENCY_STOPPING = "sufficiency_stopping"
+    POLICY_COMPLIANCE = "policy_compliance"
 
  
     # Supervisor diagnostics

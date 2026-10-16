@@ -16,7 +16,7 @@ class LearningMode(str, Enum):
     DISABLED = "disabled"
 
 
-class LearningPlane(str, Enum):
+class TracePlane(str, Enum):
     """
     Identifies which execution plane produced a trace.
 

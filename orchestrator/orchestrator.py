@@ -121,6 +121,7 @@ class Orchestrator:
         self._emit_request_event(
             event="request_submitted",
             request_id=request_id,
+            query=request.query,
         )
 
         try:
@@ -181,6 +182,7 @@ class Orchestrator:
             self._emit_request_event(
                 event="request_completed",
                 request_id=request.request_id,
+                result=result,
             )
 
             return result

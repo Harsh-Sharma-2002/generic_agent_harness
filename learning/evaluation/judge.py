@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
 from typing import Any
 
 from openai.types.chat import ChatCompletionMessageParam
@@ -17,75 +16,19 @@ from learning.evaluation.metrics import (
 from worker.llm_caller import LLMCaller
 
 
-# ============================================================
-# Models
-# ============================================================
-
-
-@dataclass(frozen=True)
-class GroundednessResult:
-    """Claim-level groundedness evaluation."""
-
-    supported_claims: int
-    contradicted_claims: int
-    unverifiable_claims: int
-
-    @property
-    def total_claims(self) -> int:
-        return (
-            self.supported_claims
-            + self.contradicted_claims
-            + self.unverifiable_claims
-        )
-
-    @property
-    def supported_rate(self) -> float:
-        if self.total_claims == 0:
-            return 0.0
-
-        return (
-            self.supported_claims
-            / self.total_claims
-        )
-
-    @property
-    def contradicted_rate(self) -> float:
-        if self.total_claims == 0:
-            return 0.0
-
-        return (
-            self.contradicted_claims
-            / self.total_claims
-        )
-
-    @property
-    def unverifiable_rate(self) -> float:
-        if self.total_claims == 0:
-            return 0.0
-
-        return (
-            self.unverifiable_claims
-            / self.total_claims
-        )
-
-
-# ============================================================
-# Judge
-# ============================================================
-
-
 class SemanticJudge:
     """
     Semantic scoring functions for one KernelAI execution.
 
-    The judge evaluates executions independently. It does not know
-    about policy versions, candidates, releases, or learning
-    decisions.
+    The judge evaluates one execution independently.
+
+    It does not know about policy versions, candidates, releases,
+    or learning decisions.
     """
 
     def __init__(
         self,
-        max_tokens: int = 1024,
+        max_tokens: int = 2048,
     ) -> None:
         if max_tokens < 1:
             raise ValueError(
@@ -104,16 +47,19 @@ class SemanticJudge:
         execution: ExecutionRecord,
     ) -> MetricResult:
         """
-        Score how completely the final answer fulfills the
-        original user request.
+        Score whether the final answer actually fulfills the
+        user's overall request.
+
+        This is intentionally holistic. Requirement-level
+        completeness is measured separately.
         """
 
-        _require_execution_answer(
+        _require_answer(
             execution
         )
 
         prompt = f"""
-Evaluate how completely the response fulfills the user's request.
+Evaluate how well the response fulfills the user's overall request.
 
 USER REQUEST:
 {execution.query}
@@ -123,15 +69,19 @@ RESPONSE:
 
 Use this rubric:
 
-1.0 = fully satisfies the request with no meaningful omission.
-0.75 = satisfies most important requirements with minor omissions.
-0.50 = partially satisfies the request but misses important requirements.
-0.25 = addresses the request only weakly or incompletely.
-0.0 = fails to answer the request.
+1.0 = fully fulfills the user's goal.
+0.75 = substantially fulfills the goal with minor weaknesses.
+0.50 = partially fulfills the goal but has important deficiencies.
+0.25 = weakly addresses the goal.
+0.0 = does not meaningfully fulfill the goal.
 
-Judge fulfillment only.
+Judge overall usefulness and correctness relative to the request.
 
-Do not consider latency, tool calls, token usage, or execution cost.
+Do not score requirement-by-requirement completeness here.
+That is evaluated separately.
+
+Do not consider latency, tool count, LLM count, token usage,
+or execution cost.
 
 Return exactly:
 
@@ -141,7 +91,7 @@ Return exactly:
 }}
 """.strip()
 
-        result = await self._score(
+        result = await self._scalar_score(
             prompt
         )
 
@@ -155,6 +105,508 @@ Return exactly:
         )
 
     # ========================================================
+    # Requirement coverage / completeness
+    # ========================================================
+
+    async def score_requirement_coverage(
+        self,
+        execution: ExecutionRecord,
+    ) -> MetricResult:
+        """
+        Extract the requirements implied by the user request and
+        classify whether each was satisfied.
+
+        Python derives the final coverage score:
+
+            satisfied = 1.0
+            partial = 0.5
+            unsatisfied = 0.0
+        """
+
+        _require_answer(
+            execution
+        )
+
+        prompt = f"""
+Determine how completely the response covers the requirements of
+the user's request.
+
+USER REQUEST:
+{execution.query}
+
+RESPONSE:
+{_serialize(execution.final_answer)}
+
+First identify the distinct requirements in the user's request.
+
+Include:
+- explicitly requested information,
+- explicitly requested actions,
+- requested constraints such as format, scope, or conciseness,
+- requirements that are directly necessary to satisfy the request.
+
+Do not invent unrelated requirements.
+
+For each requirement classify its status as exactly one of:
+
+satisfied
+    The response adequately satisfies the requirement.
+
+partial
+    The response addresses the requirement but incompletely.
+
+unsatisfied
+    The response does not meaningfully satisfy the requirement.
+
+Return exactly:
+
+{{
+  "requirements": [
+    {{
+      "requirement": "<requirement>",
+      "status": "satisfied|partial|unsatisfied"
+    }}
+  ]
+}}
+""".strip()
+
+        result = await self._call(
+            prompt
+        )
+
+        requirements = _require_list(
+            result,
+            "requirements",
+        )
+
+        satisfied = 0
+        partial = 0
+        unsatisfied = 0
+
+        for requirement in requirements:
+            if not isinstance(
+                requirement,
+                dict,
+            ):
+                raise ValueError(
+                    "Requirement evaluation entries "
+                    "must be objects."
+                )
+
+            text = requirement.get(
+                "requirement"
+            )
+
+            status = requirement.get(
+                "status"
+            )
+
+            if (
+                not isinstance(text, str)
+                or not text.strip()
+            ):
+                raise ValueError(
+                    "Requirement must contain "
+                    "non-empty text."
+                )
+
+            if status == "satisfied":
+                satisfied += 1
+
+            elif status == "partial":
+                partial += 1
+
+            elif status == "unsatisfied":
+                unsatisfied += 1
+
+            else:
+                raise ValueError(
+                    "Unknown requirement status."
+                )
+
+        total = (
+            satisfied
+            + partial
+            + unsatisfied
+        )
+
+        if total == 0:
+            raise ValueError(
+                "Requirement judge returned no requirements."
+            )
+
+        score = (
+            satisfied
+            + (0.5 * partial)
+        ) / total
+
+        return MetricResult(
+            name=MetricName.REQUIREMENT_COVERAGE,
+            source=MetricSource.MODEL,
+            value=score,
+            metadata={
+                "satisfied": satisfied,
+                "partial": partial,
+                "unsatisfied": unsatisfied,
+                "total": total,
+                "requirements": requirements,
+            },
+        )
+
+    # ========================================================
+    # Policy compliance
+    # ========================================================
+
+    async def score_policy_compliance(
+        self,
+        execution: ExecutionRecord,
+        *,
+        policy: str,
+    ) -> tuple[MetricResult, MetricResult]:
+        """
+        Evaluate whether the execution complied with its supplied
+        policy / prompt.
+
+        The model identifies applicable policy requirements and
+        classifies each one.
+
+        Python calculates both:
+        - normalized compliance rate
+        - absolute policy violation count
+        """
+
+        _require_answer(
+            execution
+        )
+
+        if not policy.strip():
+            raise ValueError(
+                "Policy compliance requires "
+                "a non-empty policy."
+            )
+
+        trajectory = _serialize_trajectory(
+            execution
+        )
+
+        prompt = f"""
+Evaluate whether this execution complied with the supplied policy.
+
+POLICY:
+{policy}
+
+USER REQUEST:
+{execution.query}
+
+EXECUTION TRAJECTORY:
+{trajectory}
+
+FINAL RESPONSE:
+{_serialize(execution.final_answer)}
+
+Identify concrete policy requirements that are applicable to this
+execution.
+
+For each applicable requirement classify it as exactly one of:
+
+compliant
+    The execution followed the requirement.
+
+violated
+    The execution clearly violated the requirement.
+
+not_applicable
+    The policy requirement does not apply to this execution.
+
+Use only observable evidence from the trajectory and final response.
+
+Do not mark something violated merely because the trace does not
+prove it occurred unless the policy explicitly requires observable
+behavior that is absent.
+
+Return exactly:
+
+{{
+  "requirements": [
+    {{
+      "requirement": "<policy requirement>",
+      "status": "compliant|violated|not_applicable"
+    }}
+  ]
+}}
+""".strip()
+
+        result = await self._call(
+            prompt
+        )
+
+        requirements = _require_list(
+            result,
+            "requirements",
+        )
+
+        compliant = 0
+        violated = 0
+        not_applicable = 0
+
+        for requirement in requirements:
+            if not isinstance(
+                requirement,
+                dict,
+            ):
+                raise ValueError(
+                    "Policy evaluation entries "
+                    "must be objects."
+                )
+
+            text = requirement.get(
+                "requirement"
+            )
+
+            status = requirement.get(
+                "status"
+            )
+
+            if (
+                not isinstance(text, str)
+                or not text.strip()
+            ):
+                raise ValueError(
+                    "Policy requirement must contain "
+                    "non-empty text."
+                )
+
+            if status == "compliant":
+                compliant += 1
+
+            elif status == "violated":
+                violated += 1
+
+            elif status == "not_applicable":
+                not_applicable += 1
+
+            else:
+                raise ValueError(
+                    "Unknown policy compliance status."
+                )
+
+        applicable = (
+            compliant
+            + violated
+        )
+
+        if applicable == 0:
+            compliance_rate = 1.0
+
+        else:
+            compliance_rate = (
+                compliant
+                / applicable
+            )
+
+        metadata = {
+            "compliant": compliant,
+            "violated": violated,
+            "not_applicable": not_applicable,
+            "applicable": applicable,
+            "requirements": requirements,
+        }
+
+        return (
+            MetricResult(
+                name=MetricName.POLICY_COMPLIANCE,
+                source=MetricSource.MODEL,
+                value=compliance_rate,
+                metadata=metadata,
+            ),
+            MetricResult(
+                name=MetricName.POLICY_VIOLATIONS,
+                source=MetricSource.MODEL,
+                value=violated,
+                metadata=metadata,
+            ),
+        )
+
+    # ========================================================
+    # Groundedness
+    # ========================================================
+
+    async def score_groundedness(
+        self,
+        execution: ExecutionRecord,
+    ) -> tuple[
+        MetricResult,
+        MetricResult,
+        MetricResult,
+    ]:
+        """
+        Classify factual claims in the final answer against the
+        evidence available from successful tool calls.
+
+        The model performs semantic classification.
+        Python calculates the resulting rates.
+        """
+
+        _require_answer(
+            execution
+        )
+
+        evidence = _serialize_evidence(
+            execution
+        )
+
+        prompt = f"""
+Evaluate the factual claims in the response against ONLY the
+available evidence.
+
+USER REQUEST:
+{execution.query}
+
+RESPONSE:
+{_serialize(execution.final_answer)}
+
+AVAILABLE EVIDENCE:
+{evidence}
+
+Identify independently verifiable factual claims in the response.
+
+For each claim classify it as exactly one of:
+
+supported
+    The available evidence supports the claim.
+
+contradicted
+    The available evidence contradicts the claim.
+
+unverifiable
+    The available evidence is insufficient to determine whether
+    the claim is supported.
+
+Do not use outside knowledge.
+
+Do not classify opinions, formatting statements, or purely
+subjective recommendations as factual claims.
+
+Return exactly:
+
+{{
+  "claims": [
+    {{
+      "claim": "<factual claim>",
+      "classification": "supported|contradicted|unverifiable"
+    }}
+  ]
+}}
+""".strip()
+
+        result = await self._call(
+            prompt
+        )
+
+        claims = _require_list(
+            result,
+            "claims",
+        )
+
+        supported = 0
+        contradicted = 0
+        unverifiable = 0
+
+        for claim in claims:
+            if not isinstance(
+                claim,
+                dict,
+            ):
+                raise ValueError(
+                    "Groundedness claim entries "
+                    "must be objects."
+                )
+
+            text = claim.get(
+                "claim"
+            )
+
+            classification = claim.get(
+                "classification"
+            )
+
+            if (
+                not isinstance(text, str)
+                or not text.strip()
+            ):
+                raise ValueError(
+                    "Groundedness claim must contain "
+                    "non-empty text."
+                )
+
+            if classification == "supported":
+                supported += 1
+
+            elif classification == "contradicted":
+                contradicted += 1
+
+            elif classification == "unverifiable":
+                unverifiable += 1
+
+            else:
+                raise ValueError(
+                    "Unknown groundedness classification."
+                )
+
+        total = (
+            supported
+            + contradicted
+            + unverifiable
+        )
+
+        if total == 0:
+            supported_rate = 1.0
+            contradicted_rate = 0.0
+            unverifiable_rate = 0.0
+
+        else:
+            supported_rate = (
+                supported / total
+            )
+
+            contradicted_rate = (
+                contradicted / total
+            )
+
+            unverifiable_rate = (
+                unverifiable / total
+            )
+
+        metadata = {
+            "supported_claims": supported,
+            "contradicted_claims": contradicted,
+            "unverifiable_claims": unverifiable,
+            "total_claims": total,
+            "claims": claims,
+        }
+
+        return (
+            MetricResult(
+                name=MetricName.SUPPORTED_CLAIM_RATE,
+                source=MetricSource.MODEL,
+                value=supported_rate,
+                metadata=metadata,
+            ),
+            MetricResult(
+                name=MetricName.CONTRADICTED_CLAIM_RATE,
+                source=MetricSource.MODEL,
+                value=contradicted_rate,
+                metadata=metadata,
+            ),
+            MetricResult(
+                name=MetricName.UNVERIFIABLE_CLAIM_RATE,
+                source=MetricSource.MODEL,
+                value=unverifiable_rate,
+                metadata=metadata,
+            ),
+        )
+
+    # ========================================================
     # Scope overreach
     # ========================================================
 
@@ -163,18 +615,18 @@ Return exactly:
         execution: ExecutionRecord,
     ) -> MetricResult:
         """
-        Score how much the final answer goes beyond what the
-        user requested.
+        Score unnecessary expansion beyond the user's request.
 
         Lower is better.
         """
 
-        _require_execution_answer(
+        _require_answer(
             execution
         )
 
         prompt = f"""
-Evaluate whether the response unnecessarily goes beyond the user's request.
+Evaluate how much the response unnecessarily exceeds the scope of
+the user's request.
 
 USER REQUEST:
 {execution.query}
@@ -187,10 +639,13 @@ Use this rubric:
 0.0 = tightly scoped to the request.
 0.25 = small amount of unnecessary material.
 0.50 = substantial unnecessary material.
-0.75 = response is significantly broader than requested.
-1.0 = response largely ignores the requested scope.
+0.75 = significantly broader than requested.
+1.0 = largely ignores the requested scope.
 
-Do not penalize useful context that is necessary to answer correctly.
+Do not penalize context that is genuinely useful or necessary for
+answering the request correctly.
+
+Do not reward brevity by itself.
 
 Return exactly:
 
@@ -200,7 +655,7 @@ Return exactly:
 }}
 """.strip()
 
-        result = await self._score(
+        result = await self._scalar_score(
             prompt
         )
 
@@ -222,13 +677,13 @@ Return exactly:
         execution: ExecutionRecord,
     ) -> MetricResult:
         """
-        Evaluate whether KernelAI continued gathering information
-        after enough evidence existed to answer the request.
+        Score whether the execution stopped gathering information
+        once enough evidence existed.
 
         Higher is better.
         """
 
-        _require_execution_answer(
+        _require_answer(
             execution
         )
 
@@ -238,7 +693,7 @@ Return exactly:
 
         prompt = f"""
 Evaluate whether the execution stopped gathering information once
-it had enough evidence to answer the user's request well.
+it had sufficient evidence to answer the user's request well.
 
 USER REQUEST:
 {execution.query}
@@ -252,13 +707,17 @@ FINAL RESPONSE:
 Use this rubric:
 
 1.0 = stopped at an appropriate point once sufficient evidence existed.
-0.75 = mostly efficient, with a small amount of unnecessary extra work.
+0.75 = mostly appropriate stopping with minor unnecessary work.
 0.50 = noticeable unnecessary work after sufficient evidence existed.
 0.25 = substantial redundant investigation.
-0.0 = continued investigating extensively despite already having enough evidence.
+0.0 = continued investigating extensively despite already having
+      sufficient evidence.
 
 Do not penalize additional work that materially improved correctness,
 coverage, verification, or confidence.
+
+Do not infer redundancy merely from the number of tool calls.
+Judge whether later calls added useful information.
 
 Return exactly:
 
@@ -268,7 +727,7 @@ Return exactly:
 }}
 """.strip()
 
-        result = await self._score(
+        result = await self._scalar_score(
             prompt
         )
 
@@ -282,155 +741,10 @@ Return exactly:
         )
 
     # ========================================================
-    # Groundedness
+    # Shared scalar scoring
     # ========================================================
 
-    async def score_groundedness(
-        self,
-        execution: ExecutionRecord,
-    ) -> tuple[MetricResult, ...]:
-        """
-        Classify factual claims in the final answer against the
-        evidence available in tool results.
-
-        The model performs claim classification. Python derives
-        the final rates.
-        """
-
-        _require_execution_answer(
-            execution
-        )
-
-        evidence = _serialize_evidence(
-            execution
-        )
-
-        prompt = f"""
-Evaluate the factual claims in the response against ONLY the evidence
-provided below.
-
-USER REQUEST:
-{execution.query}
-
-RESPONSE:
-{_serialize(execution.final_answer)}
-
-AVAILABLE EVIDENCE:
-{evidence}
-
-For each factual claim in the response, classify it as exactly one of:
-
-supported
-    The available evidence supports the claim.
-
-contradicted
-    The available evidence contradicts the claim.
-
-unverifiable
-    The available evidence is insufficient to determine whether
-    the claim is true.
-
-Do not use outside knowledge.
-
-Return exactly:
-
-{{
-  "claims": [
-    {{
-      "claim": "<factual claim>",
-      "classification": "supported|contradicted|unverifiable"
-    }}
-  ]
-}}
-""".strip()
-
-        response = await self._call(
-            prompt
-        )
-
-        claims = response.get(
-            "claims"
-        )
-
-        if not isinstance(
-            claims,
-            list,
-        ):
-            raise ValueError(
-                "Groundedness judge must return a claims list."
-            )
-
-        supported = 0
-        contradicted = 0
-        unverifiable = 0
-
-        for claim in claims:
-            if not isinstance(
-                claim,
-                dict,
-            ):
-                raise ValueError(
-                    "Groundedness claim must be an object."
-                )
-
-            classification = claim.get(
-                "classification"
-            )
-
-            if classification == "supported":
-                supported += 1
-
-            elif classification == "contradicted":
-                contradicted += 1
-
-            elif classification == "unverifiable":
-                unverifiable += 1
-
-            else:
-                raise ValueError(
-                    "Unknown groundedness classification."
-                )
-
-        result = GroundednessResult(
-            supported_claims=supported,
-            contradicted_claims=contradicted,
-            unverifiable_claims=unverifiable,
-        )
-
-        metadata = {
-            "supported_claims": supported,
-            "contradicted_claims": contradicted,
-            "unverifiable_claims": unverifiable,
-            "total_claims": result.total_claims,
-            "claims": claims,
-        }
-
-        return (
-            MetricResult(
-                name=MetricName.SUPPORTED_CLAIM_RATE,
-                source=MetricSource.MODEL,
-                value=result.supported_rate,
-                metadata=metadata,
-            ),
-            MetricResult(
-                name=MetricName.CONTRADICTED_CLAIM_RATE,
-                source=MetricSource.MODEL,
-                value=result.contradicted_rate,
-                metadata=metadata,
-            ),
-            MetricResult(
-                name=MetricName.UNVERIFIABLE_CLAIM_RATE,
-                source=MetricSource.MODEL,
-                value=result.unverifiable_rate,
-                metadata=metadata,
-            ),
-        )
-
-    # ========================================================
-    # Shared scoring
-    # ========================================================
-
-    async def _score(
+    async def _scalar_score(
         self,
         prompt: str,
     ) -> dict[str, Any]:
@@ -449,8 +763,14 @@ Return exactly:
         )
 
         if (
-            not isinstance(score, (int, float))
-            or isinstance(score, bool)
+            not isinstance(
+                score,
+                (int, float),
+            )
+            or isinstance(
+                score,
+                bool,
+            )
         ):
             raise ValueError(
                 "Semantic judge score must be numeric."
@@ -480,11 +800,15 @@ Return exactly:
             "reasoning": reasoning.strip(),
         }
 
+    # ========================================================
+    # LLM call
+    # ========================================================
+
     async def _call(
         self,
         prompt: str,
     ) -> dict[str, Any]:
-        """Call the model and parse one JSON response."""
+        """Call the semantic judge and parse its JSON response."""
 
         messages: list[
             ChatCompletionMessageParam
@@ -492,9 +816,11 @@ Return exactly:
             {
                 "role": "system",
                 "content": (
-                    "You are an evaluation component inside "
-                    "KernelAI. Evaluate only the evidence supplied "
-                    "to you. Follow the requested scoring rubric "
+                    "You are a scoring component inside "
+                    "KernelAI's offline evaluation system. "
+                    "Evaluate only the supplied execution evidence. "
+                    "Do not make learning decisions or recommend "
+                    "policy changes. Follow the requested rubric "
                     "exactly and return only valid JSON."
                 ),
             },
@@ -534,22 +860,22 @@ Return exactly:
             dict,
         ):
             raise ValueError(
-                "Semantic judge response must be "
-                "a JSON object."
+                "Semantic judge response must "
+                "be a JSON object."
             )
 
         return parsed
 
 
 # ============================================================
-# Evaluation input
+# Validation
 # ============================================================
 
 
-def _require_execution_answer(
+def _require_answer(
     execution: ExecutionRecord,
 ) -> None:
-    """Validate minimum evidence required for semantic scoring."""
+    """Validate evidence required for semantic scoring."""
 
     if not execution.query.strip():
         raise ValueError(
@@ -562,10 +888,40 @@ def _require_execution_answer(
         )
 
 
+def _require_list(
+    result: dict[str, Any],
+    key: str,
+) -> list[Any]:
+    """Require a list field from a judge response."""
+
+    value = result.get(
+        key
+    )
+
+    if not isinstance(
+        value,
+        list,
+    ):
+        raise ValueError(
+            f"Semantic judge field {key!r} "
+            "must be a list."
+        )
+
+    return value
+
+
+# ============================================================
+# Evidence serialization
+# ============================================================
+
+
 def _serialize_trajectory(
     execution: ExecutionRecord,
 ) -> str:
-    """Serialize the execution trajectory for semantic judging."""
+    """
+    Serialize Task and tool activity needed for trajectory-based
+    semantic scoring.
+    """
 
     trajectory: list[
         dict[str, Any]
@@ -575,7 +931,10 @@ def _serialize_trajectory(
         trajectory.append(
             {
                 "task": task.description,
-                "skills": list(task.skills),
+                "skills": list(
+                    task.skills
+                ),
+                "status": task.status,
                 "tool_calls": [
                     {
                         "tool": call.tool_name,
@@ -596,7 +955,7 @@ def _serialize_trajectory(
 def _serialize_evidence(
     execution: ExecutionRecord,
 ) -> str:
-    """Serialize tool results as evidence for groundedness."""
+    """Serialize successful tool results as grounding evidence."""
 
     evidence: list[
         dict[str, Any]
@@ -623,9 +982,12 @@ def _serialize_evidence(
 def _serialize(
     value: Any,
 ) -> str:
-    """Serialize values for model evaluation."""
+    """Serialize values for semantic evaluation."""
 
-    if isinstance(value, str):
+    if isinstance(
+        value,
+        str,
+    ):
         return value
 
     return json.dumps(
