@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from observability.event import RuntimeEvent
+from observability.sanitize import cap_value
 
 
 class TerminalSink:
@@ -62,6 +63,9 @@ class TerminalSink:
     ) -> str:
         """
         Format event metadata for compact terminal display.
+
+        Each value is capped so large tool payloads cannot
+        flood the console.
         """
 
         if not data:
@@ -71,13 +75,13 @@ class TerminalSink:
 
         for key, value in data.items():
             if key == "error_message":
-                parts.append(
-                    f'{key}="{value}"'
-                )
+                rendered = f'"{value}"'
             else:
-                parts.append(
-                    f"{key}={value}"
-                )
+                rendered = str(value)
+
+            rendered = cap_value(rendered)
+
+            parts.append(f"{key}={rendered}")
 
         return " ".join(
             parts

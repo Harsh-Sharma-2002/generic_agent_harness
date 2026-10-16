@@ -253,10 +253,55 @@ def render_event(
             f"  {short_id(task_id)}"
         )
 
+    # Tool-call identity inline: tool name and,
+    # for started events, the caller's query.
+
+    tool_name = event.get("tool_name")
+
+    if event_name.startswith("TOOL_CALL_") and tool_name:
+        line += f"  {tool_name}"
+
+        arguments = event.get("arguments")
+
+        if isinstance(arguments, dict) and arguments:
+            argument_summary = ", ".join(
+                f"{key}={str(value)}"
+                for key, value in arguments.items()
+            )
+
+            line += f"  {argument_summary}"
+
+        elif event.get("arguments_raw") is not None:
+            line += f"  raw={event['arguments_raw']}"
+
     st.code(
         line,
         language=None,
     )
+
+    # Full event details in a collapsible block.
+
+    identity_keys = {
+        "timestamp",
+        "component",
+        "event",
+        "request_id",
+        "task_id",
+    }
+
+    details = {
+        key: value
+        for key, value in event.items()
+        if key not in identity_keys
+        and value is not None
+    }
+
+    if details:
+        with st.expander(
+            "Event details",
+            expanded=False,
+        ):
+            st.json(details)
 
 
 # ==========================================================

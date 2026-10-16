@@ -313,6 +313,14 @@ async def execute_request(
         )
 
 
+@app.get("/health")
+async def health() -> dict[str, str]:
+    """
+    Return API health status.
+    """
+    return {
+        "status": "ok",
+    }
 # ============================================================
 # Submit Request
 # ============================================================

@@ -14,7 +14,7 @@ from tasks.request import Request
 from tasks.task import Task
 from tasks.task_executor import TaskExecutor
 from worker.clients.control import ControlToolClient
-from worker.generic_worker import GenericWorker
+from worker.factory import create_agent
 
 
 SUPERVISOR_ROLE_PATH = (
@@ -33,6 +33,9 @@ class Supervisor:
     - Task outcomes.
 
     Specialized work is delegated to Task Workers.
+
+    The concrete agent implementation is selected through
+    KernelAI's agent factory.
     """
 
     def __init__(
@@ -86,12 +89,16 @@ class Supervisor:
             tools=control_tools.get_tools(),
         )
 
-        # Request-level GenericWorker.
+        # Request-level agent instructions.
         role_prompt = SUPERVISOR_ROLE_PATH.read_text(
             encoding="utf-8"
         )
 
-        self.agent = GenericWorker(
+        # Create the configured request-level agent.
+        #
+        # Supervisor does not depend on a concrete agent
+        # implementation such as GenericWorker.
+        self.agent = create_agent(
             tools=self.control_client,
             system_prompt=role_prompt,
             allowed_tools={
@@ -106,9 +113,9 @@ class Supervisor:
         )
 
     async def _execute_task(
-    self,
-    task: Task,
-) -> TaskOutcome:
+        self,
+        task: Task,
+    ) -> TaskOutcome:
         """
         Execute one child Task while respecting this Supervisor's
         concurrent Task limit.
@@ -126,7 +133,7 @@ class Supervisor:
             )
 
             return await self.task_executor.execute(
-            task
+                task
             )
 
     async def run(

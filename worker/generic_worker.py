@@ -4,10 +4,18 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from typing import Any
 
 from openai.types.chat import ChatCompletionMessageParam
 
+from observability.sanitize import (
+    MAX_ARGUMENTS_BYTES,
+    bound_text,
+    build_arguments_trace,
+    build_result_trace,
+    scrub_error_message,
+)
 from observability.tracer import RuntimeTracer
 from worker.base import BaseWorker
 from worker.clients.base import ToolClient
@@ -324,25 +332,39 @@ class GenericWorker(BaseWorker):
         # Execute every tool requested during this turn.
 
         for tool_call in response.tool_calls:
+            tool_call_id = tool_call.id
             tool_name = tool_call.function.name
+
+            started_at = time.perf_counter()
+
+            secret_values: list[str] = []
 
             try:
                 arguments = json.loads(
                     tool_call.function.arguments
                 )
 
+                arguments_trace, secret_values = (
+                    build_arguments_trace(
+                        arguments
+                    )
+                )
+
                 self._trace(
                     "TOOL CALL",
                     {
+                        "tool_call_id": tool_call_id,
                         "tool": tool_name,
-                        "arguments": arguments,
+                        **arguments_trace,
                     },
                 )
 
                 self._emit(
                     event="tool_call_started",
                     iteration=self.iteration,
+                    tool_call_id=tool_call_id,
                     tool_name=tool_name,
+                    **arguments_trace,
                 )
 
                 tool_result = await self.tools.call_tool(
@@ -353,14 +375,44 @@ class GenericWorker(BaseWorker):
                 self._emit(
                     event="tool_call_completed",
                     iteration=self.iteration,
+                    tool_call_id=tool_call_id,
                     tool_name=tool_name,
+                    duration_seconds=round(
+                        time.perf_counter()
+                        - started_at,
+                        6,
+                    ),
+                    **build_result_trace(
+                        tool_result
+                    ),
                 )
 
             except json.JSONDecodeError as exc:
                 self._emit(
+                    event="tool_call_started",
+                    iteration=self.iteration,
+                    tool_call_id=tool_call_id,
+                    tool_name=tool_name,
+                    arguments_raw=bound_text(
+                        tool_call.function.arguments,
+                        MAX_ARGUMENTS_BYTES,
+                    ),
+                    arguments_parse_error=(
+                        f"{type(exc).__name__}: "
+                        f"{exc.msg}"
+                    ),
+                )
+
+                self._emit(
                     event="tool_call_failed",
                     iteration=self.iteration,
+                    tool_call_id=tool_call_id,
                     tool_name=tool_name,
+                    duration_seconds=round(
+                        time.perf_counter()
+                        - started_at,
+                        6,
+                    ),
                     error=type(exc).__name__,
                     error_message=self._bounded_error(
                         exc
@@ -381,10 +433,17 @@ class GenericWorker(BaseWorker):
                 self._emit(
                     event="tool_call_failed",
                     iteration=self.iteration,
+                    tool_call_id=tool_call_id,
                     tool_name=tool_name,
+                    duration_seconds=round(
+                        time.perf_counter()
+                        - started_at,
+                        6,
+                    ),
                     error=type(exc).__name__,
-                    error_message=self._bounded_error(
-                        exc
+                    error_message=scrub_error_message(
+                        self._bounded_error(exc),
+                        secret_values,
                     ),
                 )
 

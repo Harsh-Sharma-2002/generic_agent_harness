@@ -797,10 +797,15 @@ def _current_tool(
 
     A tool is active when its latest relevant lifecycle event is
     TOOL_CALL_STARTED without a later completion/failure for that
-    same tool invocation sequence.
+    same tool invocation.
+
+    Correlation uses tool_call_id when present. Events without a
+    tool_call_id fall back to the legacy name-based behavior where
+    any terminal event clears the active tool.
     """
 
     active_tool: str | None = None
+    active_tool_id: str | None = None
 
     for event in events:
 
@@ -812,16 +817,43 @@ def _current_tool(
                 "tool_name"
             )
 
+            tool_call_id = event.data.get(
+                "tool_call_id"
+            )
+
             if tool_name is not None:
                 active_tool = str(
                     tool_name
                 )
 
+            active_tool_id = (
+                str(tool_call_id)
+                if tool_call_id is not None
+                else None
+            )
+
         elif event.event in {
             "tool_call_completed",
             "tool_call_failed",
         }:
-            active_tool = None
+            terminal_id = event.data.get(
+                "tool_call_id"
+            )
+
+            if (
+                terminal_id is not None
+                and active_tool_id is not None
+            ):
+                if str(terminal_id) == active_tool_id:
+                    active_tool = None
+                    active_tool_id = None
+
+            else:
+                # Legacy events carry no tool_call_id:
+                # any terminal event clears the tool.
+
+                active_tool = None
+                active_tool_id = None
 
     return active_tool
 

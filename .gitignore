@@ -8,3 +8,5 @@ venv/
 context.json
 
 notes.md
+vault/.obsidian/
+vault/memory

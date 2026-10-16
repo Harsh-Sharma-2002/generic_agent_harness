@@ -1,4 +1,4 @@
-"""Execute KernelAI tasks using GenericWorker instances."""
+"""Execute KernelAI tasks using the configured agent implementation."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from skills.registry import get_skill
 from tasks.outcome import TaskOutcome
 from tasks.task import Task, TaskStatus
 from worker.clients.mcp import MCPToolClient
-from worker.generic_worker import GenericWorker
+from worker.factory import create_agent
 
 
 TASK_WORKER_ROLE_PATH = (
@@ -20,12 +20,14 @@ TASK_WORKER_ROLE_PATH = (
 
 class TaskExecutor:
     """
-    Translate a KernelAI Task into a configured GenericWorker
-    and execute it.
+    Translate a KernelAI Task into a configured agent and execute it.
 
     TaskExecutor owns the boundary between task definitions and
     task-level agent execution. It does not perform scheduling or
     request-level orchestration.
+
+    The concrete agent implementation is selected through
+    KernelAI's agent factory.
     """
 
     def __init__(
@@ -68,13 +70,16 @@ class TaskExecutor:
             for skill_name in task.skill_names
         ]
 
-        # Build worker instructions.
+        # Build agent instructions.
         #
         # Role:
-        #   Defines what this GenericWorker is responsible for.
+        #   Defines what the Task-level agent is responsible for.
         #
         # Skills:
         #   Define the specialized behavior needed for this Task.
+        #
+        # This skill-loading mechanism will later be replaced by
+        # KernelAI's second-brain knowledge resolver.
 
         skill_prompts = [
             skill.load()
@@ -100,9 +105,13 @@ class TaskExecutor:
                 skill.allowed_tools
             )
 
-        # Create isolated Task Worker.
+        # Create an isolated Task-level agent.
+        #
+        # TaskExecutor does not depend on a concrete implementation
+        # such as GenericWorker. Agent selection is owned by the
+        # factory.
 
-        worker = GenericWorker(
+        agent = create_agent(
             tools=MCPToolClient(),
             system_prompt=system_prompt,
             allowed_tools=allowed_tools,
@@ -116,7 +125,7 @@ class TaskExecutor:
         task.status = TaskStatus.RUNNING
 
         try:
-            result = await worker.run(
+            result = await agent.run(
                 query=task.query,
                 request_id=task.request_id,
                 task_id=task.task_id,
