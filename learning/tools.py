@@ -185,14 +185,10 @@ async def evaluate_trace_batch(
 
     evaluator = ExecutionEvaluator()
 
-    evaluations = await asyncio.gather(
-        *(
-            evaluator.evaluate(
-                execution,
-                policy=policy,
-            )
-            for execution in executions
-        )
+    evaluations = await evaluator.evaluate_many(
+        executions,
+        policy=policy,
+        batch_size=10,
     )
 
     evaluation_list = list(

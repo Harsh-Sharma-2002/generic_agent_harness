@@ -9,7 +9,7 @@ from learning.evaluation.deterministic_calculator import (
     calculate_deterministic_execution_metrics,
 )
 from learning.evaluation.execution import ExecutionRecord
-from learning.evaluation.judge import SemanticJudge
+from learning.evaluation.batch_judge import SemanticJudge
 from learning.evaluation.metrics import MetricResult
 
 
@@ -134,3 +134,129 @@ class ExecutionEvaluator:
                 metrics
             ),
         )
+
+    async def evaluate_many(
+    self,
+    executions: list[ExecutionRecord],
+    *,
+    policy: str | None = None,
+    batch_size: int = 10,
+) -> list[ExecutionEvaluation]:
+        """
+        Evaluate multiple executions using batched semantic scoring.
+
+        Deterministic metrics remain per-execution.
+        Normal semantic metrics are evaluated in batches.
+        Policy compliance remains targeted/separate.
+        """
+
+        if batch_size < 1:
+            raise ValueError(
+                "batch_size must be at least 1."
+            )
+
+        results: dict[
+            str,
+            ExecutionEvaluation,
+        ] = {}
+
+        semantic_eligible: list[
+            ExecutionRecord
+        ] = []
+
+    # --------------------------------------------------------
+    # Deterministic metrics
+    # --------------------------------------------------------
+
+        for execution in executions:
+            deterministic = (
+                calculate_deterministic_execution_metrics(
+                    execution
+                )
+            )
+
+            results[
+                execution.request_id
+            ] = ExecutionEvaluation(
+                request_id=execution.request_id,
+                metrics=tuple(
+                    deterministic
+                ),
+            )
+
+            # Same eligibility rule as existing evaluate().
+            if (
+                execution.query.strip()
+                and execution.final_answer is not None
+            ):
+                semantic_eligible.append(
+                    execution
+                )
+
+        # --------------------------------------------------------
+        # Batched semantic metrics
+        # --------------------------------------------------------
+
+        for start in range(
+            0,
+            len(semantic_eligible),
+            batch_size,
+        ):
+            batch = semantic_eligible[
+                start:start + batch_size
+            ]
+
+            semantic_results = (
+                await self.judge.score_batch(
+                    batch
+                )
+            )
+
+            for execution in batch:
+                request_id = (
+                    execution.request_id
+                )
+
+                existing = results[
+                    request_id
+                ]
+
+                metrics = list(
+                    existing.metrics
+                )
+
+                metrics.extend(
+                    semantic_results[
+                        request_id
+                    ]
+                )
+
+                # Policy compliance remains separate.
+                if policy is not None:
+                    policy_metrics = (
+                        await self.judge.score_policy_compliance(
+                            execution,
+                            policy=policy,
+                        )
+                    )
+
+                    metrics.extend(
+                        policy_metrics
+                    )
+
+                results[
+                    request_id
+                ] = ExecutionEvaluation(
+                    request_id=request_id,
+                    metrics=tuple(
+                        metrics
+                    ),
+                )
+
+        # Preserve original execution ordering.
+        return [
+            results[
+                execution.request_id
+            ]
+            for execution in executions
+        ]
