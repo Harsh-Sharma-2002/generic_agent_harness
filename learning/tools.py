@@ -1,20 +1,31 @@
-"""Local evaluation tools available to the KernelAI Learning Supervisor.
+"""Local tools available to the KernelAI Learning Supervisor.
 
-These tools provide progressive access to offline evaluation data:
+These tools support one offline learning cycle:
 
 1. evaluate_trace_batch()
-   Evaluate many executions and return only aggregate metric trends.
+   Measure aggregate behavior across historical executions.
 
 2. get_metric_outliers()
-   Inspect a small number of real executions with the highest or
-   lowest scores for one metric.
+   Inspect a small number of executions responsible for unusually
+   high or low metric values.
 
 3. get_execution_details()
-   Inspect the underlying trajectory of exactly one execution.
+   Inspect one underlying execution when deeper diagnosis is needed.
 
-The interface is intentionally progressive so the Learning Supervisor
-can begin with compact evidence and request detailed context only when
-needed.
+4. list_learning_policies()
+   Discover which policies may be learned automatically.
+
+5. get_current_policy()
+   Read the current production policy after evidence identifies it
+   as a likely source of recurring behavior.
+
+6. propose_policy_candidate()
+   Snapshot the current production policy and store an isolated
+   candidate replacement.
+
+The Learning Supervisor cannot modify production policies through
+this module. Candidate creation and production release are separate
+capabilities.
 """
 
 from __future__ import annotations
@@ -45,7 +56,16 @@ from learning.evaluation.metrics import (
     MetricName,
     MetricResult,
 )
-from learning.models import TracePlane
+from learning.models import (
+    LearningMode,
+    TracePlane,
+)
+from learning.policies.store import (
+    create_policy_candidate,
+    list_policies,
+    read_current_policy,
+    snapshot_current_policy,
+)
 
 
 # ============================================================
@@ -65,7 +85,7 @@ MAX_OUTLIER_LIMIT = 10
 
 
 # ============================================================
-# Public Learning Supervisor tools
+# Evaluation tools
 # ============================================================
 
 
@@ -76,22 +96,17 @@ async def evaluate_trace_batch(
     limit: int | None = None,
 ) -> dict[str, Any]:
     """
-    Evaluate a batch of stored KernelAI executions.
+    Evaluate historical KernelAI executions and return aggregate
+    metric trends.
 
-    Use this tool FIRST when analyzing historical agent behavior.
+    Use this tool FIRST when starting an offline learning analysis.
 
-    The tool:
-    - loads executions from the selected trace plane,
-    - calculates deterministic metrics,
-    - calculates semantic evaluation metrics,
-    - aggregates the metrics across the batch,
-    - persists detailed per-execution scores for later inspection,
-    - returns only compact aggregate statistics.
+    The tool loads stored executions, calculates deterministic and
+    semantic metrics, aggregates them across the batch, and persists
+    detailed per-execution scores for optional later inspection.
 
-    This tool intentionally does NOT return individual executions or
-    full traces. If an aggregate metric looks problematic, use
-    get_metric_outliers() to inspect a small number of relevant
-    executions.
+    Individual executions are intentionally excluded from the result
+    to keep Learning Supervisor context small.
 
     Args:
         plane:
@@ -102,40 +117,35 @@ async def evaluate_trace_batch(
             - "learning"
             - "evaluation"
 
-            Use "production" when analyzing normal KernelAI behavior.
+            Normally use "production" when learning from real KernelAI
+            behavior.
 
         policy:
-            Optional policy text used to evaluate policy compliance.
+            Optional complete policy text used to calculate policy
+            compliance metrics.
 
             When omitted, policy-compliance metrics are not calculated.
 
         limit:
-            Optional maximum number of most recently loaded executions
-            to evaluate.
-
-            When omitted, all available executions in the selected
-            trace plane are evaluated.
+            Optional maximum number of recent executions to evaluate.
 
     Returns:
-        A compact batch evaluation containing:
+        Compact batch-level evidence containing:
 
         - evaluation_id:
-            Identifier for this evaluation batch. Use this identifier
-            with get_metric_outliers().
+            Identifier used with get_metric_outliers().
 
         - plane:
-            Trace plane that was evaluated.
+            Evaluated trace plane.
 
         - execution_count:
             Number of executions evaluated.
 
         - aggregate_metrics:
-            Batch-level statistics such as mean, median, minimum,
-            maximum, and sample count for each available metric.
+            Mean, median, minimum, maximum, and sample count for every
+            available metric.
 
-        Detailed per-execution evaluations are persisted locally but
-        are intentionally excluded from this response to protect the
-        Learning Supervisor's context window.
+    This tool only evaluates behavior. It does not modify policies.
     """
 
     config = load_learning_config()
@@ -224,39 +234,23 @@ def get_metric_outliers(
     limit: int = 5,
 ) -> dict[str, Any]:
     """
-    Return a small number of executions with extreme scores for one
-    metric from an existing evaluation batch.
+    Return a small number of already-scored executions with extreme
+    values for one metric.
 
     Use this tool AFTER evaluate_trace_batch() when an aggregate metric
     needs investigation.
 
-    This tool does NOT run another evaluation. It selects already-scored
-    executions from the specified evaluation batch.
-
-    Typical use:
-
-        1. evaluate_trace_batch() reports that the average
-           sufficiency_stopping score is low.
-
-        2. Call get_metric_outliers(
-               evaluation_id=...,
-               metric="sufficiency_stopping",
-               direction="lowest",
-               limit=3,
-           )
-
-        3. Inspect the returned judge reasoning and request IDs.
-
-        4. If more evidence is needed for one request, call
-           get_execution_details() with that request_id.
+    This tool does not run another evaluation. It selects executions
+    from the previously evaluated batch.
 
     Args:
         evaluation_id:
-            Evaluation batch identifier returned by
-            evaluate_trace_batch().
+            Identifier returned by evaluate_trace_batch().
 
         metric:
-            Metric to inspect, for example:
+            Metric whose extreme executions should be inspected.
+
+            Examples:
             - "task_fulfillment"
             - "requirement_coverage"
             - "policy_compliance"
@@ -268,37 +262,28 @@ def get_metric_outliers(
             - "latency_seconds"
 
         direction:
-            Which extreme to return.
+            "lowest" returns the smallest metric values.
+            "highest" returns the largest metric values.
 
-            - "lowest":
-                executions with the smallest metric values.
-
-            - "highest":
-                executions with the largest metric values.
-
-            Remember that metric direction differs by metric.
-            For example, low task_fulfillment is usually bad while
-            high scope_overreach is usually bad.
+            Metric direction matters. For example:
+            - low task_fulfillment is usually bad,
+            - high scope_overreach is usually bad.
 
         limit:
-            Maximum number of executions to return.
+            Number of executions to return.
 
-            Must be between 1 and 10. Prefer small values such as
-            3 or 5 to preserve context.
+            Must be between 1 and 10. Prefer 3-5 to preserve context.
 
     Returns:
-        A bounded collection containing:
+        Bounded scored examples containing:
 
         - request_id
         - metric value
-        - metric metadata
+        - metric metadata / judge reasoning
 
-        Metric metadata may contain judge reasoning or structured
-        classifications.
-
-        Full execution trajectories are intentionally excluded.
-        Use get_execution_details() when the underlying execution
-        must be inspected.
+    Full execution trajectories are intentionally excluded. Call
+    get_execution_details() only when one execution requires deeper
+    diagnosis.
     """
 
     _validate_evaluation_id(
@@ -330,10 +315,8 @@ def get_metric_outliers(
         evaluation_id
     )
 
-    stored_executions = (
-        evaluation.get(
-            "executions"
-        )
+    stored_executions = evaluation.get(
+        "executions"
     )
 
     if not isinstance(
@@ -439,15 +422,10 @@ def get_execution_details(
     plane: str = "production",
 ) -> dict[str, Any]:
     """
-    Return the underlying execution trajectory for exactly one
-    KernelAI request.
+    Return the underlying trajectory of exactly one KernelAI request.
 
     Use this tool only when aggregate metrics and metric outliers are
-    insufficient to explain why an execution behaved poorly or well.
-
-    This is the deepest evaluation drill-down exposed to the Learning
-    Supervisor and may return substantially more context than the other
-    evaluation tools.
+    insufficient to explain a behavior.
 
     Recommended investigation order:
 
@@ -459,36 +437,17 @@ def get_execution_details(
 
     Args:
         request_id:
-            Request identifier obtained from get_metric_outliers()
-            or another trusted evaluation result.
+            Request identifier obtained from an evaluation result.
 
         plane:
-            Trace plane containing the execution.
-
-            Supported values:
-            - "production"
-            - "learning"
-            - "evaluation"
-
-            Usually this should match the plane used when the evaluation
-            batch was created.
+            Trace plane containing the request.
 
     Returns:
-        One structured execution containing:
+        One execution containing its query, final answer, tasks,
+        assigned skills, LLM-call counts, and tool-call trajectory.
 
-        - original user query,
-        - final answer,
-        - execution status and duration,
-        - task decomposition,
-        - skills assigned to each task,
-        - LLM-call counts,
-        - tool names,
-        - tool arguments,
-        - bounded tool-result previews,
-        - tool success/failure information.
-
-        Exactly one execution is returned. This tool never returns an
-        entire batch.
+    This is the deepest evaluation drill-down and may consume
+    substantially more context than the other evaluation tools.
     """
 
     if not request_id.strip():
@@ -521,6 +480,243 @@ def get_execution_details(
 
 
 # ============================================================
+# Policy discovery
+# ============================================================
+
+
+def list_learning_policies() -> dict[str, Any]:
+    """
+    List policies known to the learning system and the Learning
+    Supervisor's configured authority for each policy.
+
+    Use this tool before proposing a policy candidate.
+
+    Learning modes:
+
+    - "enabled":
+        The Learning Supervisor may create an isolated candidate.
+
+    - "manual_only":
+        The policy may be inspected and analyzed, but the Learning
+        Supervisor may not create a candidate automatically.
+
+    - "disabled":
+        Offline learning must not create candidates for this policy.
+
+    Returns:
+        Known policy names and their learning modes.
+
+    This tool does not return policy contents and does not modify
+    anything.
+    """
+
+    config = load_learning_config()
+
+    policies: list[
+        dict[str, str]
+    ] = []
+
+    for policy_name in list_policies():
+        policy_config = config.policies.get(
+            policy_name
+        )
+
+        mode = (
+            policy_config.learning
+            if policy_config is not None
+            else LearningMode.DISABLED
+        )
+
+        policies.append(
+            {
+                "policy_name": policy_name,
+                "learning_mode": (
+                    mode.value
+                ),
+            }
+        )
+
+    return {
+        "learning_enabled": (
+            config.enabled
+        ),
+        "policies": policies,
+    }
+
+
+def get_current_policy(
+    *,
+    policy_name: str,
+) -> dict[str, Any]:
+    """
+    Read the current production policy without modifying it.
+
+    Use this tool only after evaluation evidence identifies a policy
+    as a plausible source of recurring behavior.
+
+    Args:
+        policy_name:
+            Known semantic policy identifier.
+
+            Examples:
+            - "web_search"
+            - "text2sql"
+            - "supervisor"
+            - "task_worker"
+
+    Returns:
+        - policy_name
+        - configured learning_mode
+        - complete current production policy content
+
+    This operation is read-only.
+    """
+
+    config = load_learning_config()
+
+    policy_config = config.policies.get(
+        policy_name
+    )
+
+    mode = (
+        policy_config.learning
+        if policy_config is not None
+        else LearningMode.DISABLED
+    )
+
+    return {
+        "policy_name": policy_name,
+        "learning_mode": mode.value,
+        "content": read_current_policy(
+            policy_name
+        ),
+    }
+
+
+# ============================================================
+# Candidate creation
+# ============================================================
+
+
+def propose_policy_candidate(
+    *,
+    policy_name: str,
+    content: str,
+) -> dict[str, Any]:
+    """
+    Store an isolated candidate replacement for one production policy.
+
+    Use this tool only when batch evaluation and relevant execution
+    evidence support a recurring policy-level problem.
+
+    The complete current production policy is snapshotted before the
+    candidate is created.
+
+    Candidate creation is permitted only when:
+
+    - offline learning is globally enabled, and
+    - the target policy has learning mode "enabled".
+
+    Policies configured as "manual_only" or "disabled" cannot be
+    changed through this tool.
+
+    Args:
+        policy_name:
+            Production policy the candidate is intended to improve.
+
+        content:
+            Complete proposed replacement policy.
+
+            Supply the full policy, not a patch or partial fragment.
+
+    Returns:
+        - policy_name
+        - baseline_version_id
+        - candidate_id
+        - production_modified=False
+
+    IMPORTANT:
+        This tool does NOT overwrite the production policy.
+        It does NOT release or activate the candidate.
+        Normal KernelAI runtime behavior remains unchanged.
+    """
+
+    config = load_learning_config()
+
+    if not config.enabled:
+        raise RuntimeError(
+            "Offline learning is disabled."
+        )
+
+    policy_config = config.policies.get(
+        policy_name
+    )
+
+    if policy_config is None:
+        raise ValueError(
+            f"Policy {policy_name!r} has no "
+            "learning configuration."
+        )
+
+    mode = policy_config.learning
+
+    if mode == LearningMode.DISABLED:
+        raise PermissionError(
+            f"Learning is disabled for policy "
+            f"{policy_name!r}."
+        )
+
+    if mode == LearningMode.MANUAL_ONLY:
+        raise PermissionError(
+            f"Policy {policy_name!r} is manual-only. "
+            "Automatic candidate creation is not permitted."
+        )
+
+    if mode != LearningMode.ENABLED:
+        raise PermissionError(
+            f"Candidate creation is not permitted "
+            f"for policy {policy_name!r}."
+        )
+
+    if not isinstance(
+        content,
+        str,
+    ):
+        raise TypeError(
+            "Candidate content must be a string."
+        )
+
+    if not content.strip():
+        raise ValueError(
+            "Candidate content must not be empty."
+        )
+
+    baseline_version_id = (
+        snapshot_current_policy(
+            policy_name
+        )
+    )
+
+    candidate_id = (
+        create_policy_candidate(
+            policy_name,
+            content,
+        )
+    )
+
+    return {
+        "policy_name": policy_name,
+        "baseline_version_id": (
+            baseline_version_id
+        ),
+        "candidate_id": (
+            candidate_id
+        ),
+        "production_modified": False,
+    }
+
+
+# ============================================================
 # Execution loading
 # ============================================================
 
@@ -529,11 +725,7 @@ def _load_plane_executions(
     plane: TracePlane,
 ) -> list[ExecutionRecord]:
     """
-    Load every Request execution stored for one trace plane.
-
-    This helper is internal. Learning Supervisor tools should use the
-    public progressive-disclosure functions above rather than loading
-    complete trace planes directly.
+    Load all Request executions stored for one trace plane.
     """
 
     directory = get_trace_directory(
@@ -560,8 +752,7 @@ def _trace_files(
     directory: Path,
 ) -> list[Path]:
     """
-    Return JSONL trace files from one trace directory in deterministic
-    filename order.
+    Return JSONL trace files in deterministic filename order.
     """
 
     if not directory.exists():
@@ -596,10 +787,10 @@ def _persist_evaluation(
     ],
 ) -> Path:
     """
-    Persist detailed per-execution evaluation results.
+    Persist detailed per-execution evaluation scores.
 
-    Detailed results remain outside the Learning Supervisor's context
-    until explicitly requested through get_metric_outliers().
+    Detailed results remain outside Learning Supervisor context until
+    explicitly requested through get_metric_outliers().
     """
 
     EVALUATION_ROOT.mkdir(
@@ -644,9 +835,7 @@ def _persist_evaluation(
 def _load_evaluation(
     evaluation_id: str,
 ) -> dict[str, Any]:
-    """
-    Load one persisted evaluation batch by its opaque identifier.
-    """
+    """Load one persisted evaluation batch."""
 
     _validate_evaluation_id(
         evaluation_id
@@ -696,9 +885,7 @@ def _load_evaluation(
 def _serialize_evaluation(
     evaluation: ExecutionEvaluation,
 ) -> dict[str, Any]:
-    """
-    Serialize one execution's scores for durable evaluation storage.
-    """
+    """Serialize one execution's evaluation scores."""
 
     return {
         "request_id": (
@@ -716,9 +903,7 @@ def _serialize_evaluation(
 def _serialize_metric(
     metric: MetricResult,
 ) -> dict[str, Any]:
-    """
-    Serialize one deterministic or semantic metric.
-    """
+    """Serialize one deterministic or semantic metric."""
 
     return {
         "name": metric.name.value,
@@ -731,12 +916,7 @@ def _serialize_metric(
 def _serialize_execution(
     execution: ExecutionRecord,
 ) -> dict[str, Any]:
-    """
-    Serialize one execution for deep diagnostic inspection.
-
-    Tool results are already bounded by the observability trace
-    contract from which ExecutionRecord was reconstructed.
-    """
+    """Serialize one execution for deep diagnostic inspection."""
 
     return {
         "request_id": (
@@ -819,16 +999,14 @@ def _serialize_execution(
 
 
 # ============================================================
-# Argument parsing and validation
+# Validation
 # ============================================================
 
 
 def _parse_plane(
     value: str,
 ) -> TracePlane:
-    """
-    Convert a public string argument into a validated TracePlane.
-    """
+    """Validate a trace-plane argument."""
 
     try:
         return TracePlane(
@@ -850,9 +1028,7 @@ def _parse_plane(
 def _parse_metric(
     value: str,
 ) -> MetricName:
-    """
-    Convert a public metric string into a validated MetricName.
-    """
+    """Validate a metric-name argument."""
 
     try:
         return MetricName(
@@ -875,9 +1051,9 @@ def _validate_evaluation_id(
     evaluation_id: str,
 ) -> None:
     """
-    Validate an evaluation identifier before local file lookup.
+    Validate an opaque evaluation identifier.
 
-    Evaluation IDs are opaque identifiers, not filesystem paths.
+    Evaluation IDs are identifiers, not filesystem paths.
     """
 
     if not evaluation_id.strip():
@@ -898,9 +1074,7 @@ def _validate_evaluation_id(
 def _is_numeric(
     value: Any,
 ) -> bool:
-    """
-    Return whether a stored metric can be ordered numerically.
-    """
+    """Return whether a metric value can be numerically ordered."""
 
     return isinstance(
         value,
@@ -914,10 +1088,7 @@ def _is_numeric(
 
 
 def _new_evaluation_id() -> str:
-    """
-    Generate a unique, time-sortable identifier for one evaluation
-    batch.
-    """
+    """Generate a unique, sortable evaluation-batch identifier."""
 
     timestamp = datetime.now(
         timezone.utc

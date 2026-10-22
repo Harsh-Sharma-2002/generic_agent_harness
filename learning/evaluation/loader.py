@@ -27,21 +27,68 @@ def load_execution(
     path: Path,
 ) -> ExecutionRecord:
     """
-    Load one JSONL trace file and convert it into an
-    evaluation-ready ExecutionRecord.
+    Load one JSONL trace file containing exactly one Request
+    execution.
 
-    The trace file must contain events belonging to exactly
-    one KernelAI Request.
+    Raises ValueError when the file contains zero or multiple
+    request executions.
+    """
+
+    executions = load_executions(path)
+
+    if len(executions) == 0:
+        raise ValueError(
+            f"Trace file contains no request events: {path}"
+        )
+
+    if len(executions) > 1:
+        raise ValueError(
+            f"Trace file contains multiple requests "
+            f"({len(executions)}): {path}. "
+            "Use load_executions() instead."
+        )
+
+    return executions[0]
+
+
+def load_executions(
+    path: Path,
+) -> tuple[ExecutionRecord, ...]:
+    """
+    Load every Request execution from one JSONL trace file.
+
+    JSONLSink stores flattened events and one trace file may
+    contain events from multiple Requests, so events are grouped
+    by top-level request_id in first-appearance order.
+
+    Events without a request_id are ignored. Returns an empty
+    tuple when the file contains no request-bearing events.
     """
 
     events = _load_events(path)
 
-    if not events:
-        raise ValueError(
-            f"Trace file contains no events: {path}"
+    grouped: dict[str, list[dict[str, Any]]] = {}
+
+    for event in events:
+        request_id = event.get(
+            "request_id"
         )
 
-    return _build_execution(events)
+        if request_id is None:
+            continue
+
+        grouped.setdefault(
+            str(request_id),
+            [],
+        ).append(event)
+
+    return tuple(
+        _build_execution(
+            request_events
+        )
+        for request_events
+        in grouped.values()
+    )
 
 
 def get_trace_directory(
@@ -339,10 +386,11 @@ def _extract_final_answer(
     events: list[dict[str, Any]],
 ) -> Any | None:
     """
-    Extract the final Request result when present in the trace.
+    Extract the final Request result persisted on the
+    request_completed event.
 
-    The current orchestrator REQUEST_COMPLETED event does not
-    include the result, so this may legitimately return None.
+    Returns None when the request did not complete or the
+    result was not persisted.
     """
 
     for event in reversed(events):

@@ -16,6 +16,165 @@ from learning.evaluation.metrics import (
 from worker.llm_caller import LLMCaller
 
 
+# ============================================================
+# Structured output schemas
+# ============================================================
+
+
+def _response_format(
+    name: str,
+    schema: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Build one OpenAI-style strict JSON Schema response format
+    for the judge's LLM calls.
+    """
+
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": name,
+            "strict": True,
+            "schema": schema,
+        },
+    }
+
+
+_SCALAR_RESPONSE_FORMAT = _response_format(
+    "scalar_score",
+    {
+        "type": "object",
+        "properties": {
+            "score": {
+                "type": "number",
+            },
+            "reasoning": {
+                "type": "string",
+            },
+        },
+        "required": [
+            "score",
+            "reasoning",
+        ],
+        "additionalProperties": False,
+    },
+)
+
+
+_REQUIREMENT_COVERAGE_RESPONSE_FORMAT = _response_format(
+    "requirement_coverage",
+    {
+        "type": "object",
+        "properties": {
+            "requirements": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "requirement": {
+                            "type": "string",
+                        },
+                        "status": {
+                            "type": "string",
+                            "enum": [
+                                "satisfied",
+                                "partial",
+                                "unsatisfied",
+                            ],
+                        },
+                    },
+                    "required": [
+                        "requirement",
+                        "status",
+                    ],
+                    "additionalProperties": False,
+                },
+            },
+        },
+        "required": [
+            "requirements",
+        ],
+        "additionalProperties": False,
+    },
+)
+
+
+_POLICY_COMPLIANCE_RESPONSE_FORMAT = _response_format(
+    "policy_compliance",
+    {
+        "type": "object",
+        "properties": {
+            "requirements": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "requirement": {
+                            "type": "string",
+                        },
+                        "status": {
+                            "type": "string",
+                            "enum": [
+                                "compliant",
+                                "violated",
+                                "not_applicable",
+                            ],
+                        },
+                    },
+                    "required": [
+                        "requirement",
+                        "status",
+                    ],
+                    "additionalProperties": False,
+                },
+            },
+        },
+        "required": [
+            "requirements",
+        ],
+        "additionalProperties": False,
+    },
+)
+
+
+_CLAIMS_RESPONSE_FORMAT = _response_format(
+    "groundedness_claims",
+    {
+        "type": "object",
+        "properties": {
+            "claims": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "claim": {
+                            "type": "string",
+                        },
+                        "classification": {
+                            "type": "string",
+                            "enum": [
+                                "supported",
+                                "contradicted",
+                                "unverifiable",
+                            ],
+                        },
+                    },
+                    "required": [
+                        "claim",
+                        "classification",
+                    ],
+                    "additionalProperties": False,
+                },
+            },
+        },
+        "required": [
+            "claims",
+        ],
+        "additionalProperties": False,
+    },
+)
+
+
 class SemanticJudge:
     """
     Semantic scoring functions for one KernelAI execution.
@@ -171,7 +330,10 @@ Return exactly:
 """.strip()
 
         result = await self._call(
-            prompt
+            prompt,
+            response_format=(
+                _REQUIREMENT_COVERAGE_RESPONSE_FORMAT
+            ),
         )
 
         requirements = _require_list(
@@ -337,7 +499,10 @@ Return exactly:
 """.strip()
 
         result = await self._call(
-            prompt
+            prompt,
+            response_format=(
+                _POLICY_COMPLIANCE_RESPONSE_FORMAT
+            ),
         )
 
         requirements = _require_list(
@@ -500,7 +665,10 @@ Return exactly:
 """.strip()
 
         result = await self._call(
-            prompt
+            prompt,
+            response_format=(
+                _CLAIMS_RESPONSE_FORMAT
+            ),
         )
 
         claims = _require_list(
@@ -747,11 +915,17 @@ Return exactly:
     async def _scalar_score(
         self,
         prompt: str,
+        response_format: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Run and validate one scalar semantic score."""
 
         result = await self._call(
-            prompt
+            prompt,
+            response_format=(
+                response_format
+                if response_format is not None
+                else _SCALAR_RESPONSE_FORMAT
+            ),
         )
 
         score = result.get(
@@ -807,8 +981,19 @@ Return exactly:
     async def _call(
         self,
         prompt: str,
+        response_format: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Call the semantic judge and parse its JSON response."""
+        """
+        Call the semantic judge and parse its JSON response.
+
+        When response_format is None the judge still requests
+        generic JSON-object mode.
+        """
+
+        if response_format is None:
+            response_format = {
+                "type": "json_object",
+            }
 
         messages: list[
             ChatCompletionMessageParam
@@ -833,6 +1018,7 @@ Return exactly:
         response = await self.llm.call(
             messages=messages,
             max_tokens=self.max_tokens,
+            response_format=response_format,
         )
 
         content = response.content

@@ -63,6 +63,23 @@ class ExecutionEvaluator:
             )
         )
 
+        # Semantic scoring requires evidence that failed,
+        # cancelled, or otherwise incomplete executions
+        # legitimately lack. Such executions still receive
+        # their deterministic metrics; semantic metrics are
+        # simply absent rather than fabricated.
+
+        if (
+            not execution.query.strip()
+            or execution.final_answer is None
+        ):
+            return ExecutionEvaluation(
+                request_id=execution.request_id,
+                metrics=tuple(
+                    deterministic
+                ),
+            )
+
         semantic_jobs = [
             self.judge.score_task_fulfillment(
                 execution

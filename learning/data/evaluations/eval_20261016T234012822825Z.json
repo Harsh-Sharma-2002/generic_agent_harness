@@ -1,0 +1,2505 @@
+{
+  "evaluation_id": "eval_20261016T234012822825Z",
+  "plane": "production",
+  "execution_count": 10,
+  "executions": [
+    {
+      "request_id": "req_894e0a25fedc4a10b36aea3fd200e35c",
+      "metrics": [
+        {
+          "name": "completion",
+          "source": "deterministic",
+          "value": true,
+          "metadata": null
+        },
+        {
+          "name": "tool_calls",
+          "source": "deterministic",
+          "value": 3,
+          "metadata": null
+        },
+        {
+          "name": "llm_calls",
+          "source": "deterministic",
+          "value": 6,
+          "metadata": null
+        },
+        {
+          "name": "latency_seconds",
+          "source": "deterministic",
+          "value": 29.342436,
+          "metadata": null
+        },
+        {
+          "name": "exact_duplicate_calls",
+          "source": "deterministic",
+          "value": 0,
+          "metadata": null
+        },
+        {
+          "name": "unchanged_retries",
+          "source": "deterministic",
+          "value": 0,
+          "metadata": null
+        },
+        {
+          "name": "task_fulfillment",
+          "source": "model",
+          "value": 1.0,
+          "metadata": {
+            "reasoning": "The response directly answers the user's question by identifying the customer who placed the most orders (Customer 65) and providing the order count (11), which fully fulfills the request."
+          }
+        },
+        {
+          "name": "requirement_coverage",
+          "source": "model",
+          "value": 1.0,
+          "metadata": {
+            "satisfied": 1,
+            "partial": 0,
+            "unsatisfied": 0,
+            "total": 1,
+            "requirements": [
+              {
+                "requirement": "Identify the customer with the most orders",
+                "status": "satisfied"
+              }
+            ]
+          }
+        },
+        {
+          "name": "supported_claim_rate",
+          "source": "model",
+          "value": 1.0,
+          "metadata": {
+            "supported_claims": 2,
+            "contradicted_claims": 0,
+            "unverifiable_claims": 0,
+            "total_claims": 2,
+            "claims": [
+              {
+                "claim": "Customer 65 has placed the most orders",
+                "classification": "supported"
+              },
+              {
+                "claim": "Customer 65 placed 11 orders, the highest count of any customer",
+                "classification": "supported"
+              }
+            ]
+          }
+        },
+        {
+          "name": "contradicted_claim_rate",
+          "source": "model",
+          "value": 0.0,
+          "metadata": {
+            "supported_claims": 2,
+            "contradicted_claims": 0,
+            "unverifiable_claims": 0,
+            "total_claims": 2,
+            "claims": [
+              {
+                "claim": "Customer 65 has placed the most orders",
+                "classification": "supported"
+              },
+              {
+                "claim": "Customer 65 placed 11 orders, the highest count of any customer",
+                "classification": "supported"
+              }
+            ]
+          }
+        },
+        {
+          "name": "unverifiable_claim_rate",
+          "source": "model",
+          "value": 0.0,
+          "metadata": {
+            "supported_claims": 2,
+            "contradicted_claims": 0,
+            "unverifiable_claims": 0,
+            "total_claims": 2,
+            "claims": [
+              {
+                "claim": "Customer 65 has placed the most orders",
+                "classification": "supported"
+              },
+              {
+                "claim": "Customer 65 placed 11 orders, the highest count of any customer",
+                "classification": "supported"
+              }
+            ]
+          }
+        },
+        {
+          "name": "scope_overreach",
+          "source": "model",
+          "value": 0.0,
+          "metadata": {
+            "reasoning": "The response directly answers the question with the customer ID and order count, adding no unnecessary material."
+          }
+        },
+        {
+          "name": "sufficiency_stopping",
+          "source": "model",
+          "value": 1.0,
+          "metadata": {
+            "reasoning": "The execution gathered only the minimum necessary information: it listed tables, inspected the relevant columns of customers and orders, then ran a single aggregation query that directly answered the question. It stopped immediately once sufficient evidence was obtained, with no redundant or unnecessary calls."
+          }
+        }
+      ]
+    },
+    {
+      "request_id": "req_8df750a12fcd4641959e5a23c727ac49",
+      "metrics": [
+        {
+          "name": "completion",
+          "source": "deterministic",
+          "value": true,
+          "metadata": null
+        },
+        {
+          "name": "tool_calls",
+          "source": "deterministic",
+          "value": 5,
+          "metadata": null
+        },
+        {
+          "name": "llm_calls",
+          "source": "deterministic",
+          "value": 7,
+          "metadata": null
+        },
+        {
+          "name": "latency_seconds",
+          "source": "deterministic",
+          "value": 137.413439,
+          "metadata": null
+        },
+        {
+          "name": "exact_duplicate_calls",
+          "source": "deterministic",
+          "value": 0,
+          "metadata": null
+        },
+        {
+          "name": "unchanged_retries",
+          "source": "deterministic",
+          "value": 0,
+          "metadata": null
+        },
+        {
+          "name": "task_fulfillment",
+          "source": "model",
+          "value": 1.0,
+          "metadata": {
+            "reasoning": "..."
+          }
+        },
+        {
+          "name": "requirement_coverage",
+          "source": "model",
+          "value": 1.0,
+          "metadata": {
+            "satisfied": 2,
+            "partial": 0,
+            "unsatisfied": 0,
+            "total": 2,
+            "requirements": [
+              {
+                "requirement": "Find the latest OpenAI announcement",
+                "status": "satisfied"
+              },
+              {
+                "requirement": "Explain why the announcement matters",
+                "status": "satisfied"
+              }
+            ]
+          }
+        },
+        {
+          "name": "supported_claim_rate",
+          "source": "model",
+          "value": 0.7142857142857143,
+          "metadata": {
+            "supported_claims": 10,
+            "contradicted_claims": 0,
+            "unverifiable_claims": 4,
+            "total_claims": 14,
+            "claims": [
+              {
+                "claim": "OpenAI announced Ultrafast mode for GPT-6.1 Sol, available across the API (Responses API), Codex, and ChatGPT.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Developers call gpt-6.1-sol with service_tier: \"ultrafast\" to dramatically shrink the gap between generated tokens.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Ultrafast mode delivers near-Astra-level intelligence at roughly 8× the speed of Sol Standard.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Ultrafast mode is open to all API users (subject to rate limits).",
+                "classification": "supported"
+              },
+              {
+                "claim": "Ultrafast mode supports US and EU data residency.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Ultrafast mode works over WebSockets for low-latency streaming.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Ultrafast mode is live on Amazon Bedrock.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Ultrafast mode pricing is 6× Standard rates.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Fast mode pricing is 2× Standard rates.",
+                "classification": "supported"
+              },
+              {
+                "claim": "OpenAI's Ultrafast mode for GPT-6.1 Sol is its most recent announcement (October 8–9, 2026).",
+                "classification": "unverifiable"
+              },
+              {
+                "claim": "Ultrafast mode makes genuinely interactive AI applications commercially viable.",
+                "classification": "unverifiable"
+              },
+              {
+                "claim": "EU data residency options remove a major compliance blocker for European customers.",
+                "classification": "unverifiable"
+              },
+              {
+                "claim": "Ultrafast mode being available on AWS Bedrock at launch is a notable competitive move.",
+                "classification": "unverifiable"
+              },
+              {
+                "claim": "Reuters reports OpenAI's annualized revenue approaching ~$50 billion in September.",
+                "classification": "supported"
+              }
+            ]
+          }
+        },
+        {
+          "name": "contradicted_claim_rate",
+          "source": "model",
+          "value": 0.0,
+          "metadata": {
+            "supported_claims": 10,
+            "contradicted_claims": 0,
+            "unverifiable_claims": 4,
+            "total_claims": 14,
+            "claims": [
+              {
+                "claim": "OpenAI announced Ultrafast mode for GPT-6.1 Sol, available across the API (Responses API), Codex, and ChatGPT.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Developers call gpt-6.1-sol with service_tier: \"ultrafast\" to dramatically shrink the gap between generated tokens.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Ultrafast mode delivers near-Astra-level intelligence at roughly 8× the speed of Sol Standard.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Ultrafast mode is open to all API users (subject to rate limits).",
+                "classification": "supported"
+              },
+              {
+                "claim": "Ultrafast mode supports US and EU data residency.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Ultrafast mode works over WebSockets for low-latency streaming.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Ultrafast mode is live on Amazon Bedrock.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Ultrafast mode pricing is 6× Standard rates.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Fast mode pricing is 2× Standard rates.",
+                "classification": "supported"
+              },
+              {
+                "claim": "OpenAI's Ultrafast mode for GPT-6.1 Sol is its most recent announcement (October 8–9, 2026).",
+                "classification": "unverifiable"
+              },
+              {
+                "claim": "Ultrafast mode makes genuinely interactive AI applications commercially viable.",
+                "classification": "unverifiable"
+              },
+              {
+                "claim": "EU data residency options remove a major compliance blocker for European customers.",
+                "classification": "unverifiable"
+              },
+              {
+                "claim": "Ultrafast mode being available on AWS Bedrock at launch is a notable competitive move.",
+                "classification": "unverifiable"
+              },
+              {
+                "claim": "Reuters reports OpenAI's annualized revenue approaching ~$50 billion in September.",
+                "classification": "supported"
+              }
+            ]
+          }
+        },
+        {
+          "name": "unverifiable_claim_rate",
+          "source": "model",
+          "value": 0.2857142857142857,
+          "metadata": {
+            "supported_claims": 10,
+            "contradicted_claims": 0,
+            "unverifiable_claims": 4,
+            "total_claims": 14,
+            "claims": [
+              {
+                "claim": "OpenAI announced Ultrafast mode for GPT-6.1 Sol, available across the API (Responses API), Codex, and ChatGPT.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Developers call gpt-6.1-sol with service_tier: \"ultrafast\" to dramatically shrink the gap between generated tokens.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Ultrafast mode delivers near-Astra-level intelligence at roughly 8× the speed of Sol Standard.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Ultrafast mode is open to all API users (subject to rate limits).",
+                "classification": "supported"
+              },
+              {
+                "claim": "Ultrafast mode supports US and EU data residency.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Ultrafast mode works over WebSockets for low-latency streaming.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Ultrafast mode is live on Amazon Bedrock.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Ultrafast mode pricing is 6× Standard rates.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Fast mode pricing is 2× Standard rates.",
+                "classification": "supported"
+              },
+              {
+                "claim": "OpenAI's Ultrafast mode for GPT-6.1 Sol is its most recent announcement (October 8–9, 2026).",
+                "classification": "unverifiable"
+              },
+              {
+                "claim": "Ultrafast mode makes genuinely interactive AI applications commercially viable.",
+                "classification": "unverifiable"
+              },
+              {
+                "claim": "EU data residency options remove a major compliance blocker for European customers.",
+                "classification": "unverifiable"
+              },
+              {
+                "claim": "Ultrafast mode being available on AWS Bedrock at launch is a notable competitive move.",
+                "classification": "unverifiable"
+              },
+              {
+                "claim": "Reuters reports OpenAI's annualized revenue approaching ~$50 billion in September.",
+                "classification": "supported"
+              }
+            ]
+          }
+        },
+        {
+          "name": "scope_overreach",
+          "source": "model",
+          "value": 0.0,
+          "metadata": {
+            "reasoning": "The response directly answers the request: it identifies the latest announcement (Ultrafast mode for GPT‑6.1 Sol) and explains why it matters with several concise points. All material — the competitive framing, enterprise/data residency notes, Bedrock availability, and revenue context — supports the 'why it matters' explanation and is not extraneous. Scope stays tight; no unnecessary tangents."
+          }
+        },
+        {
+          "name": "sufficiency_stopping",
+          "source": "model",
+          "value": 1.0,
+          "metadata": {
+            "reasoning": "..."
+          }
+        }
+      ]
+    },
+    {
+      "request_id": "req_df8f92a379ec427f851039c8eb1aa858",
+      "metrics": [
+        {
+          "name": "completion",
+          "source": "deterministic",
+          "value": true,
+          "metadata": null
+        },
+        {
+          "name": "tool_calls",
+          "source": "deterministic",
+          "value": 4,
+          "metadata": null
+        },
+        {
+          "name": "llm_calls",
+          "source": "deterministic",
+          "value": 7,
+          "metadata": null
+        },
+        {
+          "name": "latency_seconds",
+          "source": "deterministic",
+          "value": 28.60586,
+          "metadata": null
+        },
+        {
+          "name": "exact_duplicate_calls",
+          "source": "deterministic",
+          "value": 0,
+          "metadata": null
+        },
+        {
+          "name": "unchanged_retries",
+          "source": "deterministic",
+          "value": 0,
+          "metadata": null
+        },
+        {
+          "name": "task_fulfillment",
+          "source": "model",
+          "value": 1.0,
+          "metadata": {
+            "reasoning": "The response directly answers the question with a specific average order value ($513.92) and briefly explains the calculation methodology (summing item amounts across all 500 orders). It is clear, concise, and fully addresses the user's request."
+          }
+        },
+        {
+          "name": "requirement_coverage",
+          "source": "model",
+          "value": 1.0,
+          "metadata": {
+            "satisfied": 2,
+            "partial": 0,
+            "unsatisfied": 0,
+            "total": 2,
+            "requirements": [
+              {
+                "requirement": "State the average order value",
+                "status": "satisfied"
+              },
+              {
+                "requirement": "Provide sufficient supporting detail/methodology to substantiate the value",
+                "status": "satisfied"
+              }
+            ]
+          }
+        },
+        {
+          "name": "supported_claim_rate",
+          "source": "model",
+          "value": 1.0,
+          "metadata": {
+            "supported_claims": 3,
+            "contradicted_claims": 0,
+            "unverifiable_claims": 0,
+            "total_claims": 3,
+            "claims": [
+              {
+                "claim": "The average order value is approximately $513.92",
+                "classification": "supported"
+              },
+              {
+                "claim": "Order totals were calculated by summing quantity × unit_price from order items and averaging across all orders",
+                "classification": "supported"
+              },
+              {
+                "claim": "There are 500 orders in the database",
+                "classification": "supported"
+              }
+            ]
+          }
+        },
+        {
+          "name": "contradicted_claim_rate",
+          "source": "model",
+          "value": 0.0,
+          "metadata": {
+            "supported_claims": 3,
+            "contradicted_claims": 0,
+            "unverifiable_claims": 0,
+            "total_claims": 3,
+            "claims": [
+              {
+                "claim": "The average order value is approximately $513.92",
+                "classification": "supported"
+              },
+              {
+                "claim": "Order totals were calculated by summing quantity × unit_price from order items and averaging across all orders",
+                "classification": "supported"
+              },
+              {
+                "claim": "There are 500 orders in the database",
+                "classification": "supported"
+              }
+            ]
+          }
+        },
+        {
+          "name": "unverifiable_claim_rate",
+          "source": "model",
+          "value": 0.0,
+          "metadata": {
+            "supported_claims": 3,
+            "contradicted_claims": 0,
+            "unverifiable_claims": 0,
+            "total_claims": 3,
+            "claims": [
+              {
+                "claim": "The average order value is approximately $513.92",
+                "classification": "supported"
+              },
+              {
+                "claim": "Order totals were calculated by summing quantity × unit_price from order items and averaging across all orders",
+                "classification": "supported"
+              },
+              {
+                "claim": "There are 500 orders in the database",
+                "classification": "supported"
+              }
+            ]
+          }
+        },
+        {
+          "name": "scope_overreach",
+          "source": "model",
+          "value": 0.0,
+          "metadata": {
+            "reasoning": "The response directly answers the question and adds only a brief methodological note about the calculation, which is useful context for verifying correctness. No unnecessary material."
+          }
+        },
+        {
+          "name": "sufficiency_stopping",
+          "source": "model",
+          "value": 0.75,
+          "metadata": {
+            "reasoning": "The execution gathered schema info, computed AOV via order_items, then ran one verification query (COUNT(*) on orders) confirming the 500 orders matched the grouped count — this materially improved confidence and was justified, not redundant."
+          }
+        }
+      ]
+    },
+    {
+      "request_id": "req_3283fb8f280145cdae234299cede41bf",
+      "metrics": [
+        {
+          "name": "completion",
+          "source": "deterministic",
+          "value": true,
+          "metadata": null
+        },
+        {
+          "name": "tool_calls",
+          "source": "deterministic",
+          "value": 3,
+          "metadata": null
+        },
+        {
+          "name": "llm_calls",
+          "source": "deterministic",
+          "value": 6,
+          "metadata": null
+        },
+        {
+          "name": "latency_seconds",
+          "source": "deterministic",
+          "value": 18.709895,
+          "metadata": null
+        },
+        {
+          "name": "exact_duplicate_calls",
+          "source": "deterministic",
+          "value": 0,
+          "metadata": null
+        },
+        {
+          "name": "unchanged_retries",
+          "source": "deterministic",
+          "value": 0,
+          "metadata": null
+        },
+        {
+          "name": "task_fulfillment",
+          "source": "model",
+          "value": 1.0,
+          "metadata": {
+            "reasoning": "The user asked a simple count question and the response directly answers '20 products', correctly formatted and complete."
+          }
+        },
+        {
+          "name": "requirement_coverage",
+          "source": "model",
+          "value": 1.0,
+          "metadata": {
+            "satisfied": 1,
+            "partial": 0,
+            "unsatisfied": 0,
+            "total": 1,
+            "requirements": [
+              {
+                "requirement": "State the number of products in the database",
+                "status": "satisfied"
+              }
+            ]
+          }
+        },
+        {
+          "name": "supported_claim_rate",
+          "source": "model",
+          "value": 1.0,
+          "metadata": {
+            "supported_claims": 1,
+            "contradicted_claims": 0,
+            "unverifiable_claims": 0,
+            "total_claims": 1,
+            "claims": [
+              {
+                "claim": "There are 20 products in the database",
+                "classification": "supported"
+              }
+            ]
+          }
+        },
+        {
+          "name": "contradicted_claim_rate",
+          "source": "model",
+          "value": 0.0,
+          "metadata": {
+            "supported_claims": 1,
+            "contradicted_claims": 0,
+            "unverifiable_claims": 0,
+            "total_claims": 1,
+            "claims": [
+              {
+                "claim": "There are 20 products in the database",
+                "classification": "supported"
+              }
+            ]
+          }
+        },
+        {
+          "name": "unverifiable_claim_rate",
+          "source": "model",
+          "value": 0.0,
+          "metadata": {
+            "supported_claims": 1,
+            "contradicted_claims": 0,
+            "unverifiable_claims": 0,
+            "total_claims": 1,
+            "claims": [
+              {
+                "claim": "There are 20 products in the database",
+                "classification": "supported"
+              }
+            ]
+          }
+        },
+        {
+          "name": "scope_overreach",
+          "source": "model",
+          "value": 0.0,
+          "metadata": {
+            "reasoning": "..."
+          }
+        },
+        {
+          "name": "sufficiency_stopping",
+          "source": "model",
+          "value": 1.0,
+          "metadata": {
+            "reasoning": "The execution efficiently gathered just enough information: schema discovery, column inspection, and the count query. Stopped immediately after obtaining the answer."
+          }
+        }
+      ]
+    },
+    {
+      "request_id": "req_84c10077841b4fb6877288f2aa71222e",
+      "metrics": [
+        {
+          "name": "completion",
+          "source": "deterministic",
+          "value": true,
+          "metadata": null
+        },
+        {
+          "name": "tool_calls",
+          "source": "deterministic",
+          "value": 3,
+          "metadata": null
+        },
+        {
+          "name": "llm_calls",
+          "source": "deterministic",
+          "value": 5,
+          "metadata": null
+        },
+        {
+          "name": "latency_seconds",
+          "source": "deterministic",
+          "value": 702.441489,
+          "metadata": null
+        },
+        {
+          "name": "exact_duplicate_calls",
+          "source": "deterministic",
+          "value": 0,
+          "metadata": null
+        },
+        {
+          "name": "unchanged_retries",
+          "source": "deterministic",
+          "value": 0,
+          "metadata": null
+        },
+        {
+          "name": "task_fulfillment",
+          "source": "model",
+          "value": 1.0,
+          "metadata": {
+            "reasoning": "The final response directly answers the user's question with a detailed, well-organized summary of the latest AMD AI accelerator news, covering product launches, roadmap, and business developments with specific facts and dates. No evident omissions or errors."
+          }
+        },
+        {
+          "name": "requirement_coverage",
+          "source": "model",
+          "value": 1.0,
+          "metadata": {
+            "satisfied": 3,
+            "partial": 0,
+            "unsatisfied": 0,
+            "total": 3,
+            "requirements": [
+              {
+                "requirement": "Provide the latest news about AMD AI accelerators",
+                "status": "satisfied"
+              },
+              {
+                "requirement": "Cover recent/current developments (recency of information)",
+                "status": "satisfied"
+              },
+              {
+                "requirement": "Cover news specific to AMD AI accelerators (product focus)",
+                "status": "satisfied"
+              }
+            ]
+          }
+        },
+        {
+          "name": "supported_claim_rate",
+          "source": "model",
+          "value": 1.0,
+          "metadata": {
+            "supported_claims": 19,
+            "contradicted_claims": 0,
+            "unverifiable_claims": 0,
+            "total_claims": 19,
+            "claims": [
+              {
+                "claim": "MI400 Series launched July 23, 2026 at Advancing AI 2026 event",
+                "classification": "supported"
+              },
+              {
+                "claim": "MI400 built on CDNA 5 architecture",
+                "classification": "supported"
+              },
+              {
+                "claim": "MI400 delivers up to 40 PFLOPS FP4 and 20 PFLOPS FP8 per GPU, roughly 2x the compute of MI350",
+                "classification": "supported"
+              },
+              {
+                "claim": "MI455X is the flagship GPU for rack-scale systems",
+                "classification": "supported"
+              },
+              {
+                "claim": "Helios combines 72 MI455X GPUs and 18 sixth-gen EPYC Venice CPUs",
+                "classification": "supported"
+              },
+              {
+                "claim": "Venice CPUs are the first x86 server CPUs on TSMC's 2nm node",
+                "classification": "supported"
+              },
+              {
+                "claim": "Helios uses Pensando networking and ROCm software in a liquid-cooled rack",
+                "classification": "supported"
+              },
+              {
+                "claim": "Helios rated up to ~2.9 exaflops FP4 inference performance",
+                "classification": "supported"
+              },
+              {
+                "claim": "MI500 roadmap for 2027 positioned against NVIDIA Vera Rubin",
+                "classification": "supported"
+              },
+              {
+                "claim": "MI350 series with MXFP6/MXFP4 support is the current shipping volume product",
+                "classification": "supported"
+              },
+              {
+                "claim": "October 2025 OpenAI agreement to deploy up to 6 GW of AMD GPUs",
+                "classification": "supported"
+              },
+              {
+                "claim": "First 1 GW tranche of MI450s in H2 2026",
+                "classification": "supported"
+              },
+              {
+                "claim": "OpenAI warrant for up to 160 million shares (~10%) vesting as deployments hit milestones",
+                "classification": "supported"
+              },
+              {
+                "claim": "Meta warrant for up to 160 million shares tied to GPU purchases",
+                "classification": "supported"
+              },
+              {
+                "claim": "Oracle ordered 50,000 AMD GPUs",
+                "classification": "supported"
+              },
+              {
+                "claim": "Anthropic ~$5B compute deal",
+                "classification": "supported"
+              },
+              {
+                "claim": "AMD stock hit record close $633.91 on Oct 2, 2026, nearing $1 trillion valuation",
+                "classification": "supported"
+              },
+              {
+                "claim": "There is reporting on MI455X production/delay concerns",
+                "classification": "supported"
+              },
+              {
+                "claim": "Analysts view ROCm as narrowing the gap with CUDA",
+                "classification": "supported"
+              }
+            ]
+          }
+        },
+        {
+          "name": "contradicted_claim_rate",
+          "source": "model",
+          "value": 0.0,
+          "metadata": {
+            "supported_claims": 19,
+            "contradicted_claims": 0,
+            "unverifiable_claims": 0,
+            "total_claims": 19,
+            "claims": [
+              {
+                "claim": "MI400 Series launched July 23, 2026 at Advancing AI 2026 event",
+                "classification": "supported"
+              },
+              {
+                "claim": "MI400 built on CDNA 5 architecture",
+                "classification": "supported"
+              },
+              {
+                "claim": "MI400 delivers up to 40 PFLOPS FP4 and 20 PFLOPS FP8 per GPU, roughly 2x the compute of MI350",
+                "classification": "supported"
+              },
+              {
+                "claim": "MI455X is the flagship GPU for rack-scale systems",
+                "classification": "supported"
+              },
+              {
+                "claim": "Helios combines 72 MI455X GPUs and 18 sixth-gen EPYC Venice CPUs",
+                "classification": "supported"
+              },
+              {
+                "claim": "Venice CPUs are the first x86 server CPUs on TSMC's 2nm node",
+                "classification": "supported"
+              },
+              {
+                "claim": "Helios uses Pensando networking and ROCm software in a liquid-cooled rack",
+                "classification": "supported"
+              },
+              {
+                "claim": "Helios rated up to ~2.9 exaflops FP4 inference performance",
+                "classification": "supported"
+              },
+              {
+                "claim": "MI500 roadmap for 2027 positioned against NVIDIA Vera Rubin",
+                "classification": "supported"
+              },
+              {
+                "claim": "MI350 series with MXFP6/MXFP4 support is the current shipping volume product",
+                "classification": "supported"
+              },
+              {
+                "claim": "October 2025 OpenAI agreement to deploy up to 6 GW of AMD GPUs",
+                "classification": "supported"
+              },
+              {
+                "claim": "First 1 GW tranche of MI450s in H2 2026",
+                "classification": "supported"
+              },
+              {
+                "claim": "OpenAI warrant for up to 160 million shares (~10%) vesting as deployments hit milestones",
+                "classification": "supported"
+              },
+              {
+                "claim": "Meta warrant for up to 160 million shares tied to GPU purchases",
+                "classification": "supported"
+              },
+              {
+                "claim": "Oracle ordered 50,000 AMD GPUs",
+                "classification": "supported"
+              },
+              {
+                "claim": "Anthropic ~$5B compute deal",
+                "classification": "supported"
+              },
+              {
+                "claim": "AMD stock hit record close $633.91 on Oct 2, 2026, nearing $1 trillion valuation",
+                "classification": "supported"
+              },
+              {
+                "claim": "There is reporting on MI455X production/delay concerns",
+                "classification": "supported"
+              },
+              {
+                "claim": "Analysts view ROCm as narrowing the gap with CUDA",
+                "classification": "supported"
+              }
+            ]
+          }
+        },
+        {
+          "name": "unverifiable_claim_rate",
+          "source": "model",
+          "value": 0.0,
+          "metadata": {
+            "supported_claims": 19,
+            "contradicted_claims": 0,
+            "unverifiable_claims": 0,
+            "total_claims": 19,
+            "claims": [
+              {
+                "claim": "MI400 Series launched July 23, 2026 at Advancing AI 2026 event",
+                "classification": "supported"
+              },
+              {
+                "claim": "MI400 built on CDNA 5 architecture",
+                "classification": "supported"
+              },
+              {
+                "claim": "MI400 delivers up to 40 PFLOPS FP4 and 20 PFLOPS FP8 per GPU, roughly 2x the compute of MI350",
+                "classification": "supported"
+              },
+              {
+                "claim": "MI455X is the flagship GPU for rack-scale systems",
+                "classification": "supported"
+              },
+              {
+                "claim": "Helios combines 72 MI455X GPUs and 18 sixth-gen EPYC Venice CPUs",
+                "classification": "supported"
+              },
+              {
+                "claim": "Venice CPUs are the first x86 server CPUs on TSMC's 2nm node",
+                "classification": "supported"
+              },
+              {
+                "claim": "Helios uses Pensando networking and ROCm software in a liquid-cooled rack",
+                "classification": "supported"
+              },
+              {
+                "claim": "Helios rated up to ~2.9 exaflops FP4 inference performance",
+                "classification": "supported"
+              },
+              {
+                "claim": "MI500 roadmap for 2027 positioned against NVIDIA Vera Rubin",
+                "classification": "supported"
+              },
+              {
+                "claim": "MI350 series with MXFP6/MXFP4 support is the current shipping volume product",
+                "classification": "supported"
+              },
+              {
+                "claim": "October 2025 OpenAI agreement to deploy up to 6 GW of AMD GPUs",
+                "classification": "supported"
+              },
+              {
+                "claim": "First 1 GW tranche of MI450s in H2 2026",
+                "classification": "supported"
+              },
+              {
+                "claim": "OpenAI warrant for up to 160 million shares (~10%) vesting as deployments hit milestones",
+                "classification": "supported"
+              },
+              {
+                "claim": "Meta warrant for up to 160 million shares tied to GPU purchases",
+                "classification": "supported"
+              },
+              {
+                "claim": "Oracle ordered 50,000 AMD GPUs",
+                "classification": "supported"
+              },
+              {
+                "claim": "Anthropic ~$5B compute deal",
+                "classification": "supported"
+              },
+              {
+                "claim": "AMD stock hit record close $633.91 on Oct 2, 2026, nearing $1 trillion valuation",
+                "classification": "supported"
+              },
+              {
+                "claim": "There is reporting on MI455X production/delay concerns",
+                "classification": "supported"
+              },
+              {
+                "claim": "Analysts view ROCm as narrowing the gap with CUDA",
+                "classification": "supported"
+              }
+            ]
+          }
+        },
+        {
+          "name": "scope_overreach",
+          "source": "model",
+          "value": 0.0,
+          "metadata": {
+            "reasoning": "All material (MI400 launch, Helios, OpenAI/Meta/Oracle/Anthropic deals, stock milestone) is directly relevant to 'latest news about AMD AI accelerators.' Business developments are standard AI accelerator news. No unnecessary scope."
+          }
+        },
+        {
+          "name": "sufficiency_stopping",
+          "source": "model",
+          "value": 1.0,
+          "metadata": {
+            "reasoning": "Three searches, each covering a distinct facet: product launch details (MI400/MI350), the Helios rack and Advancing AI event, and the OpenAI business deal. The final response covers products, specs, business developments, and caveats, so no further research was needed."
+          }
+        }
+      ]
+    },
+    {
+      "request_id": "req_d3e93c383b9f479d9877432e7a7224d1",
+      "metrics": [
+        {
+          "name": "completion",
+          "source": "deterministic",
+          "value": true,
+          "metadata": null
+        },
+        {
+          "name": "tool_calls",
+          "source": "deterministic",
+          "value": 3,
+          "metadata": null
+        },
+        {
+          "name": "llm_calls",
+          "source": "deterministic",
+          "value": 6,
+          "metadata": null
+        },
+        {
+          "name": "latency_seconds",
+          "source": "deterministic",
+          "value": 6.083478,
+          "metadata": null
+        },
+        {
+          "name": "exact_duplicate_calls",
+          "source": "deterministic",
+          "value": 0,
+          "metadata": null
+        },
+        {
+          "name": "unchanged_retries",
+          "source": "deterministic",
+          "value": 0,
+          "metadata": null
+        },
+        {
+          "name": "task_fulfillment",
+          "source": "model",
+          "value": 0.75,
+          "metadata": {
+            "reasoning": "The response provides a direct answer (20 products), fulfilling the user's goal, but mentions an 'odd JSON-like result' without explaining the anomaly, which is a minor weakness."
+          }
+        },
+        {
+          "name": "requirement_coverage",
+          "source": "model",
+          "value": 1.0,
+          "metadata": {
+            "satisfied": 1,
+            "partial": 0,
+            "unsatisfied": 0,
+            "total": 1,
+            "requirements": [
+              {
+                "requirement": "State the number of products in the database",
+                "status": "satisfied"
+              }
+            ]
+          }
+        },
+        {
+          "name": "supported_claim_rate",
+          "source": "model",
+          "value": 0.5,
+          "metadata": {
+            "supported_claims": 1,
+            "contradicted_claims": 0,
+            "unverifiable_claims": 1,
+            "total_claims": 2,
+            "claims": [
+              {
+                "claim": "The database contains 20 products",
+                "classification": "supported"
+              },
+              {
+                "claim": "The Task Worker returned an odd JSON-like result",
+                "classification": "unverifiable"
+              }
+            ]
+          }
+        },
+        {
+          "name": "contradicted_claim_rate",
+          "source": "model",
+          "value": 0.0,
+          "metadata": {
+            "supported_claims": 1,
+            "contradicted_claims": 0,
+            "unverifiable_claims": 1,
+            "total_claims": 2,
+            "claims": [
+              {
+                "claim": "The database contains 20 products",
+                "classification": "supported"
+              },
+              {
+                "claim": "The Task Worker returned an odd JSON-like result",
+                "classification": "unverifiable"
+              }
+            ]
+          }
+        },
+        {
+          "name": "unverifiable_claim_rate",
+          "source": "model",
+          "value": 0.5,
+          "metadata": {
+            "supported_claims": 1,
+            "contradicted_claims": 0,
+            "unverifiable_claims": 1,
+            "total_claims": 2,
+            "claims": [
+              {
+                "claim": "The database contains 20 products",
+                "classification": "supported"
+              },
+              {
+                "claim": "The Task Worker returned an odd JSON-like result",
+                "classification": "unverifiable"
+              }
+            ]
+          }
+        },
+        {
+          "name": "scope_overreach",
+          "source": "model",
+          "value": 0.0,
+          "metadata": {
+            "reasoning": "The response directly answers the question with a single sentence and a brief mention of a tool result anomaly; no substantial unnecessary material."
+          }
+        },
+        {
+          "name": "sufficiency_stopping",
+          "source": "model",
+          "value": 1.0,
+          "metadata": {
+            "reasoning": "The agent listed tables, inspected the products table schema to confirm the correct target table, then ran the count query and stopped. Each call added useful information, and it stopped immediately after obtaining the answer (20). No redundant work."
+          }
+        }
+      ]
+    },
+    {
+      "request_id": "req_d2644c89ea09403282eac1fd24ec3273",
+      "metrics": [
+        {
+          "name": "completion",
+          "source": "deterministic",
+          "value": true,
+          "metadata": null
+        },
+        {
+          "name": "tool_calls",
+          "source": "deterministic",
+          "value": 3,
+          "metadata": null
+        },
+        {
+          "name": "llm_calls",
+          "source": "deterministic",
+          "value": 6,
+          "metadata": null
+        },
+        {
+          "name": "latency_seconds",
+          "source": "deterministic",
+          "value": 5.443728,
+          "metadata": null
+        },
+        {
+          "name": "exact_duplicate_calls",
+          "source": "deterministic",
+          "value": 0,
+          "metadata": null
+        },
+        {
+          "name": "unchanged_retries",
+          "source": "deterministic",
+          "value": 0,
+          "metadata": null
+        },
+        {
+          "name": "task_fulfillment",
+          "source": "model",
+          "value": 1.0,
+          "metadata": {
+            "reasoning": "The response directly answers the user's question with a specific count of 20 products, which fully fulfills the request."
+          }
+        },
+        {
+          "name": "requirement_coverage",
+          "source": "model",
+          "value": 1.0,
+          "metadata": {
+            "satisfied": 1,
+            "partial": 0,
+            "unsatisfied": 0,
+            "total": 1,
+            "requirements": [
+              {
+                "requirement": "State the number of products in the database",
+                "status": "satisfied"
+              }
+            ]
+          }
+        },
+        {
+          "name": "supported_claim_rate",
+          "source": "model",
+          "value": 1.0,
+          "metadata": {
+            "supported_claims": 1,
+            "contradicted_claims": 0,
+            "unverifiable_claims": 0,
+            "total_claims": 1,
+            "claims": [
+              {
+                "claim": "There are 20 products in the database",
+                "classification": "supported"
+              }
+            ]
+          }
+        },
+        {
+          "name": "contradicted_claim_rate",
+          "source": "model",
+          "value": 0.0,
+          "metadata": {
+            "supported_claims": 1,
+            "contradicted_claims": 0,
+            "unverifiable_claims": 0,
+            "total_claims": 1,
+            "claims": [
+              {
+                "claim": "There are 20 products in the database",
+                "classification": "supported"
+              }
+            ]
+          }
+        },
+        {
+          "name": "unverifiable_claim_rate",
+          "source": "model",
+          "value": 0.0,
+          "metadata": {
+            "supported_claims": 1,
+            "contradicted_claims": 0,
+            "unverifiable_claims": 0,
+            "total_claims": 1,
+            "claims": [
+              {
+                "claim": "There are 20 products in the database",
+                "classification": "supported"
+              }
+            ]
+          }
+        },
+        {
+          "name": "scope_overreach",
+          "source": "model",
+          "value": 0.0,
+          "metadata": {
+            "reasoning": "..."
+          }
+        },
+        {
+          "name": "sufficiency_stopping",
+          "source": "model",
+          "value": 1.0,
+          "metadata": {
+            "reasoning": "The agent explored tables, inspected the products schema, then ran the count. Each call was useful for constructing the correct query; no unnecessary work after evidence was sufficient."
+          }
+        }
+      ]
+    },
+    {
+      "request_id": "req_743490e794e5493c862ced8325a9bf97",
+      "metrics": [
+        {
+          "name": "completion",
+          "source": "deterministic",
+          "value": true,
+          "metadata": null
+        },
+        {
+          "name": "tool_calls",
+          "source": "deterministic",
+          "value": 5,
+          "metadata": null
+        },
+        {
+          "name": "llm_calls",
+          "source": "deterministic",
+          "value": 7,
+          "metadata": null
+        },
+        {
+          "name": "latency_seconds",
+          "source": "deterministic",
+          "value": 732.956058,
+          "metadata": null
+        },
+        {
+          "name": "exact_duplicate_calls",
+          "source": "deterministic",
+          "value": 0,
+          "metadata": null
+        },
+        {
+          "name": "unchanged_retries",
+          "source": "deterministic",
+          "value": 0,
+          "metadata": null
+        },
+        {
+          "name": "task_fulfillment",
+          "source": "model",
+          "value": 0.75,
+          "metadata": {
+            "reasoning": "The response substantially fulfills the user's goal of finding recent developments in open-source language models. It covers key releases (DeepSeek-R1, Qwen3, Llama 4, Kimi K2, gpt-oss, DeepSeek-V3.1, GLM-4.5) with dates, licensing, and architectural details, plus overarching trends, which directly addresses the request.\n\nWeaknesses: the phrase 'open-source' is used somewhat loosely where 'open-weight' would be more precise, and some specific details (parameter counts, active parameters, context lengths) are stated with confidence but may be approximate or slightly inaccurate. Minor inaccuracies in fine-grained figures do not materially undermine the core usefulness, but they prevent a fully confident 1.0."
+          }
+        },
+        {
+          "name": "requirement_coverage",
+          "source": "model",
+          "value": 1.0,
+          "metadata": {
+            "satisfied": 2,
+            "partial": 0,
+            "unsatisfied": 0,
+            "total": 2,
+            "requirements": [
+              {
+                "requirement": "Identify recent developments in open-source language models",
+                "status": "satisfied"
+              },
+              {
+                "requirement": "Coverage should be recent/current",
+                "status": "satisfied"
+              }
+            ]
+          }
+        },
+        {
+          "name": "supported_claim_rate",
+          "source": "model",
+          "value": 1.0,
+          "metadata": {
+            "supported_claims": 11,
+            "contradicted_claims": 0,
+            "unverifiable_claims": 0,
+            "total_claims": 11,
+            "claims": [
+              {
+                "claim": "DeepSeek released a reasoning model called DeepSeek-R1 in January 2025 that achieves performance on par with OpenAI-o1, fully open-source under MIT License with 6 distilled models.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Qwen3 was released by Alibaba in April 2025.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Meta unveiled Llama 4 suite (Scout, Maverick, Behemoth) on April 5, 2025 as open-weight models.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Kimi K2 was released by Moonshot AI in July 2025 as an open-weight MoE model with approximately 1 trillion total parameters, strong at agentic and coding tasks.",
+                "classification": "supported"
+              },
+              {
+                "claim": "OpenAI released gpt-oss-120b and gpt-oss-20b in August 2025, its first open-weight models since GPT-2 in 2019, under Apache 2.0 license, MoE, optimized for reasoning, tool use, and consumer hardware.",
+                "classification": "supported"
+              },
+              {
+                "claim": "DeepSeek-V3.1 was released in August 2025 as a hybrid Think/Non-Think model with 671B total parameters (~37B active), 128K context, and stronger agent/tool-use skills.",
+                "classification": "supported"
+              },
+              {
+                "claim": "GLM-4.5 was released by Zhipu AI in mid-2025 and is competitive in reasoning and coding benchmarks.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Open-weight solutions now account for over half of LLM deployments.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Chinese labs are frequently matching or beating Western closed models at much lower cost.",
+                "classification": "supported"
+              },
+              {
+                "claim": "MoE + efficiency became dominant, enabling 100B+ to 1T parameter models to run cheaply.",
+                "classification": "supported"
+              },
+              {
+                "claim": "OpenAI re-entered open-weight territory after six years.",
+                "classification": "supported"
+              }
+            ]
+          }
+        },
+        {
+          "name": "contradicted_claim_rate",
+          "source": "model",
+          "value": 0.0,
+          "metadata": {
+            "supported_claims": 11,
+            "contradicted_claims": 0,
+            "unverifiable_claims": 0,
+            "total_claims": 11,
+            "claims": [
+              {
+                "claim": "DeepSeek released a reasoning model called DeepSeek-R1 in January 2025 that achieves performance on par with OpenAI-o1, fully open-source under MIT License with 6 distilled models.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Qwen3 was released by Alibaba in April 2025.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Meta unveiled Llama 4 suite (Scout, Maverick, Behemoth) on April 5, 2025 as open-weight models.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Kimi K2 was released by Moonshot AI in July 2025 as an open-weight MoE model with approximately 1 trillion total parameters, strong at agentic and coding tasks.",
+                "classification": "supported"
+              },
+              {
+                "claim": "OpenAI released gpt-oss-120b and gpt-oss-20b in August 2025, its first open-weight models since GPT-2 in 2019, under Apache 2.0 license, MoE, optimized for reasoning, tool use, and consumer hardware.",
+                "classification": "supported"
+              },
+              {
+                "claim": "DeepSeek-V3.1 was released in August 2025 as a hybrid Think/Non-Think model with 671B total parameters (~37B active), 128K context, and stronger agent/tool-use skills.",
+                "classification": "supported"
+              },
+              {
+                "claim": "GLM-4.5 was released by Zhipu AI in mid-2025 and is competitive in reasoning and coding benchmarks.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Open-weight solutions now account for over half of LLM deployments.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Chinese labs are frequently matching or beating Western closed models at much lower cost.",
+                "classification": "supported"
+              },
+              {
+                "claim": "MoE + efficiency became dominant, enabling 100B+ to 1T parameter models to run cheaply.",
+                "classification": "supported"
+              },
+              {
+                "claim": "OpenAI re-entered open-weight territory after six years.",
+                "classification": "supported"
+              }
+            ]
+          }
+        },
+        {
+          "name": "unverifiable_claim_rate",
+          "source": "model",
+          "value": 0.0,
+          "metadata": {
+            "supported_claims": 11,
+            "contradicted_claims": 0,
+            "unverifiable_claims": 0,
+            "total_claims": 11,
+            "claims": [
+              {
+                "claim": "DeepSeek released a reasoning model called DeepSeek-R1 in January 2025 that achieves performance on par with OpenAI-o1, fully open-source under MIT License with 6 distilled models.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Qwen3 was released by Alibaba in April 2025.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Meta unveiled Llama 4 suite (Scout, Maverick, Behemoth) on April 5, 2025 as open-weight models.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Kimi K2 was released by Moonshot AI in July 2025 as an open-weight MoE model with approximately 1 trillion total parameters, strong at agentic and coding tasks.",
+                "classification": "supported"
+              },
+              {
+                "claim": "OpenAI released gpt-oss-120b and gpt-oss-20b in August 2025, its first open-weight models since GPT-2 in 2019, under Apache 2.0 license, MoE, optimized for reasoning, tool use, and consumer hardware.",
+                "classification": "supported"
+              },
+              {
+                "claim": "DeepSeek-V3.1 was released in August 2025 as a hybrid Think/Non-Think model with 671B total parameters (~37B active), 128K context, and stronger agent/tool-use skills.",
+                "classification": "supported"
+              },
+              {
+                "claim": "GLM-4.5 was released by Zhipu AI in mid-2025 and is competitive in reasoning and coding benchmarks.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Open-weight solutions now account for over half of LLM deployments.",
+                "classification": "supported"
+              },
+              {
+                "claim": "Chinese labs are frequently matching or beating Western closed models at much lower cost.",
+                "classification": "supported"
+              },
+              {
+                "claim": "MoE + efficiency became dominant, enabling 100B+ to 1T parameter models to run cheaply.",
+                "classification": "supported"
+              },
+              {
+                "claim": "OpenAI re-entered open-weight territory after six years.",
+                "classification": "supported"
+              }
+            ]
+          }
+        },
+        {
+          "name": "scope_overreach",
+          "source": "model",
+          "value": 0.25,
+          "metadata": {
+            "reasoning": "The response directly answers the request for recent open-source LLM developments and adds only limited extra material: brief strategic context (open-source share, pressure on vendors) and a hedge note. Most content is on-topic; the surplus is small rather than substantial."
+          }
+        },
+        {
+          "name": "sufficiency_stopping",
+          "source": "model",
+          "value": 1.0,
+          "metadata": {
+            "reasoning": "The execution made five searches that each added value: broad overview, latest releases, gpt-oss specifics, Chinese model release dates, and DeepSeek V3.1 verification. It stopped once sufficient evidence (dates, names, capabilities) existed to answer well."
+          }
+        }
+      ]
+    },
+    {
+      "request_id": "req_59a2422c5176415f91e2ab2d6d1b2a51",
+      "metrics": [
+        {
+          "name": "completion",
+          "source": "deterministic",
+          "value": true,
+          "metadata": null
+        },
+        {
+          "name": "tool_calls",
+          "source": "deterministic",
+          "value": 35,
+          "metadata": null
+        },
+        {
+          "name": "llm_calls",
+          "source": "deterministic",
+          "value": 39,
+          "metadata": null
+        },
+        {
+          "name": "latency_seconds",
+          "source": "deterministic",
+          "value": 340.527325,
+          "metadata": null
+        },
+        {
+          "name": "exact_duplicate_calls",
+          "source": "deterministic",
+          "value": 0,
+          "metadata": null
+        },
+        {
+          "name": "unchanged_retries",
+          "source": "deterministic",
+          "value": 0,
+          "metadata": null
+        },
+        {
+          "name": "task_fulfillment",
+          "source": "model",
+          "value": 0.75,
+          "metadata": {
+            "reasoning": "The response delivers detailed, well-organized per-company summaries and a comparison table, substantially fulfilling the request. Minor weaknesses include text cut off mid-sentence and the presence of future-dated/unverifiable items presented as fact."
+          }
+        },
+        {
+          "name": "requirement_coverage",
+          "source": "model",
+          "value": 0.9642857142857143,
+          "metadata": {
+            "satisfied": 13,
+            "partial": 1,
+            "unsatisfied": 0,
+            "total": 14,
+            "requirements": [
+              {
+                "requirement": "Research AI accelerator developments from NVIDIA",
+                "status": "satisfied"
+              },
+              {
+                "requirement": "Research AI accelerator developments from AMD",
+                "status": "satisfied"
+              },
+              {
+                "requirement": "Research AI accelerator developments from Google",
+                "status": "satisfied"
+              },
+              {
+                "requirement": "Research AI accelerator developments from AWS",
+                "status": "satisfied"
+              },
+              {
+                "requirement": "Research AI accelerator developments from Intel",
+                "status": "satisfied"
+              },
+              {
+                "requirement": "Research AI accelerator developments from Microsoft",
+                "status": "satisfied"
+              },
+              {
+                "requirement": "Research AI accelerator developments from Meta",
+                "status": "satisfied"
+              },
+              {
+                "requirement": "Research AI accelerator developments from Cerebras",
+                "status": "satisfied"
+              },
+              {
+                "requirement": "For each company, summarize its current accelerator platform",
+                "status": "satisfied"
+              },
+              {
+                "requirement": "For each company, cover important recent announcements",
+                "status": "satisfied"
+              },
+              {
+                "requirement": "For each company, cover availability",
+                "status": "partial"
+              },
+              {
+                "requirement": "For each company, cover market positioning",
+                "status": "satisfied"
+              },
+              {
+                "requirement": "Provide a concise comparison of all eight platforms",
+                "status": "satisfied"
+              },
+              {
+                "requirement": "Coverage treats each company as independent research work",
+                "status": "satisfied"
+              }
+            ]
+          }
+        },
+        {
+          "name": "supported_claim_rate",
+          "source": "model",
+          "value": 0.9361702127659575,
+          "metadata": {
+            "supported_claims": 44,
+            "contradicted_claims": 0,
+            "unverifiable_claims": 3,
+            "total_claims": 47,
+            "claims": [
+              {
+                "claim": "NVIDIA Blackwell Ultra GB300 NVL72 is broadly deployed as flagship",
+                "classification": "supported"
+              },
+              {
+                "claim": "Vera Rubin platform entered full production June 1, 2026 and ships H2 2026",
+                "classification": "supported"
+              },
+              {
+                "claim": "Rubin GPUs have HBM4; Vera Rubin NVL72 delivers AI training with one-fourth the GPUs and inference at one-tenth cost per million tokens vs GB200",
+                "classification": "supported"
+              },
+              {
+                "claim": "Rubin Ultra in 2027 with Kyber rack",
+                "classification": "supported"
+              },
+              {
+                "claim": "Feynman 2028 on annual cadence",
+                "classification": "supported"
+              },
+              {
+                "claim": "NVIDIA holds ~80-90% market share",
+                "classification": "supported"
+              },
+              {
+                "claim": "NVIDIA China share fell to 34% in H1 2026 under export controls",
+                "classification": "supported"
+              },
+              {
+                "claim": "AMD MI350 series shipping since mid-2025",
+                "classification": "supported"
+              },
+              {
+                "claim": "MI400 series/MI455X and Helios 72-GPU rack launched July 2026",
+                "classification": "supported"
+              },
+              {
+                "claim": "MI455X has 432GB HBM4 and CDNA 5",
+                "classification": "supported"
+              },
+              {
+                "claim": "AMD claims ~15% more AI compute and ~50% more HBM/bandwidth than Vera Rubin NVL72",
+                "classification": "supported"
+              },
+              {
+                "claim": "AMD-OpenAI 6GW deal announced Oct 2025, first 1GW MI450 H2 2026",
+                "classification": "supported"
+              },
+              {
+                "claim": "Google TPU Ironwood (v7) inference-optimized with 192GB HBM3e per chip, pods up to 9,216 chips and ~42.5 exaflops FP8, ~2x perf/watt vs Trillium",
+                "classification": "supported"
+              },
+              {
+                "claim": "Ironwood GA on Google Cloud (TPU7x) since late 2025",
+                "classification": "supported"
+              },
+              {
+                "claim": "Anthropic deal for up to 1M TPUs and >1GW capacity in 2025, tens of billions",
+                "classification": "supported"
+              },
+              {
+                "claim": "~$40B Google investment in Anthropic in 2026, up to ~5GW",
+                "classification": "supported"
+              },
+              {
+                "claim": "Trainium2 offers 30-40% better price performance than GPU-based EC2 P5e/P5en",
+                "classification": "supported"
+              },
+              {
+                "claim": "Trainium3 is AWS's first 3nm AI chip with 2.52 PFLOPS FP8, 144GB HBM3e, 144-chip UltraServers, 4.4x performance vs Trn2, GA since December 2025",
+                "classification": "supported"
+              },
+              {
+                "claim": "Trainium4 signaled",
+                "classification": "supported"
+              },
+              {
+                "claim": "Project Rainier with Anthropic and $100B+ ten-year commitment for up to 5GW",
+                "classification": "supported"
+              },
+              {
+                "claim": "Gaudi 3 is Intel's only shipping AI accelerator",
+                "classification": "supported"
+              },
+              {
+                "claim": "Falcon Shores cancelled as commercial product January 2025, remains internal",
+                "classification": "supported"
+              },
+              {
+                "claim": "Intel direction includes Jaguar Shores and Crescent Island / GPU D-Series (D270)",
+                "classification": "supported"
+              },
+              {
+                "claim": "D270 is Xe3P with 160GB LPDDR5X (up to 480GB via ODMs), 350W",
+                "classification": "supported"
+              },
+              {
+                "claim": "D270 sampling H2 2026, availability in 2027",
+                "classification": "supported"
+              },
+              {
+                "claim": "Maia 200 announced January 2026",
+                "classification": "supported"
+              },
+              {
+                "claim": "Maia 200 purpose-built for inference with ~30% better performance-per-price",
+                "classification": "supported"
+              },
+              {
+                "claim": "Maia 200 in production and rolling out in US Azure regions",
+                "classification": "supported"
+              },
+              {
+                "claim": "Maia 300 coming in 2027 and multi-gigawatt deployments starting 2027",
+                "classification": "supported"
+              },
+              {
+                "claim": "Maia will be primary inference system for Microsoft products",
+                "classification": "supported"
+              },
+              {
+                "claim": "Meta announced four new MTIA generations (300/400/450/500) through 2027",
+                "classification": "supported"
+              },
+              {
+                "claim": "MTIA 300 already in production",
+                "classification": "supported"
+              },
+              {
+                "claim": "Iris is fourth-generation MTIA chip designed with Broadcom, made by TSMC, entering production 2026",
+                "classification": "supported"
+              },
+              {
+                "claim": "Broadcom partnership extended through 2029 starting with >1GW of MTIA compute",
+                "classification": "supported"
+              },
+              {
+                "claim": "Meta targets ~14GW AI compute capacity by 2027",
+                "classification": "supported"
+              },
+              {
+                "claim": "Cerebras WSE-3 in CS-3: ~4T transistors, 900K cores, 44GB on-wafer SRAM",
+                "classification": "supported"
+              },
+              {
+                "claim": "CS-4 Nexus (August 2026) bolts three WSE-3 Turbo wafers into rack system, claims up to 30x faster inference than GPU racks and ~10x throughput-per-watt",
+                "classification": "supported"
+              },
+              {
+                "claim": "Cerebras-AWS cloud deal 2026",
+                "classification": "supported"
+              },
+              {
+                "claim": "Cerebras Nasdaq IPO (CBRS) May 2026",
+                "classification": "supported"
+              },
+              {
+                "claim": "Cerebras claims >21x faster than B200 on Llama 3 70B-class reasoning workloads",
+                "classification": "supported"
+              },
+              {
+                "claim": "Cerebras reported $10B+ OpenAI contract",
+                "classification": "supported"
+              },
+              {
+                "claim": "GB300 NVL72 features 288GB HBM3e",
+                "classification": "unverifiable"
+              },
+              {
+                "claim": "Rubin GPUs NVL72 claim ~1/4 training GPU and ~1/10 inference cost vs GB200 NVL72",
+                "classification": "supported"
+              },
+              {
+                "claim": "Ironwood is inference-optimized",
+                "classification": "supported"
+              },
+              {
+                "claim": "AWS Trn2 instances powered by 16 Trainium2 chips",
+                "classification": "supported"
+              },
+              {
+                "claim": "Trainium3 announced at re:Invent 2025",
+                "classification": "unverifiable"
+              },
+              {
+                "claim": "Cerebras CS-4 first shipments expected to begin current quarter",
+                "classification": "unverifiable"
+              }
+            ]
+          }
+        },
+        {
+          "name": "contradicted_claim_rate",
+          "source": "model",
+          "value": 0.0,
+          "metadata": {
+            "supported_claims": 44,
+            "contradicted_claims": 0,
+            "unverifiable_claims": 3,
+            "total_claims": 47,
+            "claims": [
+              {
+                "claim": "NVIDIA Blackwell Ultra GB300 NVL72 is broadly deployed as flagship",
+                "classification": "supported"
+              },
+              {
+                "claim": "Vera Rubin platform entered full production June 1, 2026 and ships H2 2026",
+                "classification": "supported"
+              },
+              {
+                "claim": "Rubin GPUs have HBM4; Vera Rubin NVL72 delivers AI training with one-fourth the GPUs and inference at one-tenth cost per million tokens vs GB200",
+                "classification": "supported"
+              },
+              {
+                "claim": "Rubin Ultra in 2027 with Kyber rack",
+                "classification": "supported"
+              },
+              {
+                "claim": "Feynman 2028 on annual cadence",
+                "classification": "supported"
+              },
+              {
+                "claim": "NVIDIA holds ~80-90% market share",
+                "classification": "supported"
+              },
+              {
+                "claim": "NVIDIA China share fell to 34% in H1 2026 under export controls",
+                "classification": "supported"
+              },
+              {
+                "claim": "AMD MI350 series shipping since mid-2025",
+                "classification": "supported"
+              },
+              {
+                "claim": "MI400 series/MI455X and Helios 72-GPU rack launched July 2026",
+                "classification": "supported"
+              },
+              {
+                "claim": "MI455X has 432GB HBM4 and CDNA 5",
+                "classification": "supported"
+              },
+              {
+                "claim": "AMD claims ~15% more AI compute and ~50% more HBM/bandwidth than Vera Rubin NVL72",
+                "classification": "supported"
+              },
+              {
+                "claim": "AMD-OpenAI 6GW deal announced Oct 2025, first 1GW MI450 H2 2026",
+                "classification": "supported"
+              },
+              {
+                "claim": "Google TPU Ironwood (v7) inference-optimized with 192GB HBM3e per chip, pods up to 9,216 chips and ~42.5 exaflops FP8, ~2x perf/watt vs Trillium",
+                "classification": "supported"
+              },
+              {
+                "claim": "Ironwood GA on Google Cloud (TPU7x) since late 2025",
+                "classification": "supported"
+              },
+              {
+                "claim": "Anthropic deal for up to 1M TPUs and >1GW capacity in 2025, tens of billions",
+                "classification": "supported"
+              },
+              {
+                "claim": "~$40B Google investment in Anthropic in 2026, up to ~5GW",
+                "classification": "supported"
+              },
+              {
+                "claim": "Trainium2 offers 30-40% better price performance than GPU-based EC2 P5e/P5en",
+                "classification": "supported"
+              },
+              {
+                "claim": "Trainium3 is AWS's first 3nm AI chip with 2.52 PFLOPS FP8, 144GB HBM3e, 144-chip UltraServers, 4.4x performance vs Trn2, GA since December 2025",
+                "classification": "supported"
+              },
+              {
+                "claim": "Trainium4 signaled",
+                "classification": "supported"
+              },
+              {
+                "claim": "Project Rainier with Anthropic and $100B+ ten-year commitment for up to 5GW",
+                "classification": "supported"
+              },
+              {
+                "claim": "Gaudi 3 is Intel's only shipping AI accelerator",
+                "classification": "supported"
+              },
+              {
+                "claim": "Falcon Shores cancelled as commercial product January 2025, remains internal",
+                "classification": "supported"
+              },
+              {
+                "claim": "Intel direction includes Jaguar Shores and Crescent Island / GPU D-Series (D270)",
+                "classification": "supported"
+              },
+              {
+                "claim": "D270 is Xe3P with 160GB LPDDR5X (up to 480GB via ODMs), 350W",
+                "classification": "supported"
+              },
+              {
+                "claim": "D270 sampling H2 2026, availability in 2027",
+                "classification": "supported"
+              },
+              {
+                "claim": "Maia 200 announced January 2026",
+                "classification": "supported"
+              },
+              {
+                "claim": "Maia 200 purpose-built for inference with ~30% better performance-per-price",
+                "classification": "supported"
+              },
+              {
+                "claim": "Maia 200 in production and rolling out in US Azure regions",
+                "classification": "supported"
+              },
+              {
+                "claim": "Maia 300 coming in 2027 and multi-gigawatt deployments starting 2027",
+                "classification": "supported"
+              },
+              {
+                "claim": "Maia will be primary inference system for Microsoft products",
+                "classification": "supported"
+              },
+              {
+                "claim": "Meta announced four new MTIA generations (300/400/450/500) through 2027",
+                "classification": "supported"
+              },
+              {
+                "claim": "MTIA 300 already in production",
+                "classification": "supported"
+              },
+              {
+                "claim": "Iris is fourth-generation MTIA chip designed with Broadcom, made by TSMC, entering production 2026",
+                "classification": "supported"
+              },
+              {
+                "claim": "Broadcom partnership extended through 2029 starting with >1GW of MTIA compute",
+                "classification": "supported"
+              },
+              {
+                "claim": "Meta targets ~14GW AI compute capacity by 2027",
+                "classification": "supported"
+              },
+              {
+                "claim": "Cerebras WSE-3 in CS-3: ~4T transistors, 900K cores, 44GB on-wafer SRAM",
+                "classification": "supported"
+              },
+              {
+                "claim": "CS-4 Nexus (August 2026) bolts three WSE-3 Turbo wafers into rack system, claims up to 30x faster inference than GPU racks and ~10x throughput-per-watt",
+                "classification": "supported"
+              },
+              {
+                "claim": "Cerebras-AWS cloud deal 2026",
+                "classification": "supported"
+              },
+              {
+                "claim": "Cerebras Nasdaq IPO (CBRS) May 2026",
+                "classification": "supported"
+              },
+              {
+                "claim": "Cerebras claims >21x faster than B200 on Llama 3 70B-class reasoning workloads",
+                "classification": "supported"
+              },
+              {
+                "claim": "Cerebras reported $10B+ OpenAI contract",
+                "classification": "supported"
+              },
+              {
+                "claim": "GB300 NVL72 features 288GB HBM3e",
+                "classification": "unverifiable"
+              },
+              {
+                "claim": "Rubin GPUs NVL72 claim ~1/4 training GPU and ~1/10 inference cost vs GB200 NVL72",
+                "classification": "supported"
+              },
+              {
+                "claim": "Ironwood is inference-optimized",
+                "classification": "supported"
+              },
+              {
+                "claim": "AWS Trn2 instances powered by 16 Trainium2 chips",
+                "classification": "supported"
+              },
+              {
+                "claim": "Trainium3 announced at re:Invent 2025",
+                "classification": "unverifiable"
+              },
+              {
+                "claim": "Cerebras CS-4 first shipments expected to begin current quarter",
+                "classification": "unverifiable"
+              }
+            ]
+          }
+        },
+        {
+          "name": "unverifiable_claim_rate",
+          "source": "model",
+          "value": 0.06382978723404255,
+          "metadata": {
+            "supported_claims": 44,
+            "contradicted_claims": 0,
+            "unverifiable_claims": 3,
+            "total_claims": 47,
+            "claims": [
+              {
+                "claim": "NVIDIA Blackwell Ultra GB300 NVL72 is broadly deployed as flagship",
+                "classification": "supported"
+              },
+              {
+                "claim": "Vera Rubin platform entered full production June 1, 2026 and ships H2 2026",
+                "classification": "supported"
+              },
+              {
+                "claim": "Rubin GPUs have HBM4; Vera Rubin NVL72 delivers AI training with one-fourth the GPUs and inference at one-tenth cost per million tokens vs GB200",
+                "classification": "supported"
+              },
+              {
+                "claim": "Rubin Ultra in 2027 with Kyber rack",
+                "classification": "supported"
+              },
+              {
+                "claim": "Feynman 2028 on annual cadence",
+                "classification": "supported"
+              },
+              {
+                "claim": "NVIDIA holds ~80-90% market share",
+                "classification": "supported"
+              },
+              {
+                "claim": "NVIDIA China share fell to 34% in H1 2026 under export controls",
+                "classification": "supported"
+              },
+              {
+                "claim": "AMD MI350 series shipping since mid-2025",
+                "classification": "supported"
+              },
+              {
+                "claim": "MI400 series/MI455X and Helios 72-GPU rack launched July 2026",
+                "classification": "supported"
+              },
+              {
+                "claim": "MI455X has 432GB HBM4 and CDNA 5",
+                "classification": "supported"
+              },
+              {
+                "claim": "AMD claims ~15% more AI compute and ~50% more HBM/bandwidth than Vera Rubin NVL72",
+                "classification": "supported"
+              },
+              {
+                "claim": "AMD-OpenAI 6GW deal announced Oct 2025, first 1GW MI450 H2 2026",
+                "classification": "supported"
+              },
+              {
+                "claim": "Google TPU Ironwood (v7) inference-optimized with 192GB HBM3e per chip, pods up to 9,216 chips and ~42.5 exaflops FP8, ~2x perf/watt vs Trillium",
+                "classification": "supported"
+              },
+              {
+                "claim": "Ironwood GA on Google Cloud (TPU7x) since late 2025",
+                "classification": "supported"
+              },
+              {
+                "claim": "Anthropic deal for up to 1M TPUs and >1GW capacity in 2025, tens of billions",
+                "classification": "supported"
+              },
+              {
+                "claim": "~$40B Google investment in Anthropic in 2026, up to ~5GW",
+                "classification": "supported"
+              },
+              {
+                "claim": "Trainium2 offers 30-40% better price performance than GPU-based EC2 P5e/P5en",
+                "classification": "supported"
+              },
+              {
+                "claim": "Trainium3 is AWS's first 3nm AI chip with 2.52 PFLOPS FP8, 144GB HBM3e, 144-chip UltraServers, 4.4x performance vs Trn2, GA since December 2025",
+                "classification": "supported"
+              },
+              {
+                "claim": "Trainium4 signaled",
+                "classification": "supported"
+              },
+              {
+                "claim": "Project Rainier with Anthropic and $100B+ ten-year commitment for up to 5GW",
+                "classification": "supported"
+              },
+              {
+                "claim": "Gaudi 3 is Intel's only shipping AI accelerator",
+                "classification": "supported"
+              },
+              {
+                "claim": "Falcon Shores cancelled as commercial product January 2025, remains internal",
+                "classification": "supported"
+              },
+              {
+                "claim": "Intel direction includes Jaguar Shores and Crescent Island / GPU D-Series (D270)",
+                "classification": "supported"
+              },
+              {
+                "claim": "D270 is Xe3P with 160GB LPDDR5X (up to 480GB via ODMs), 350W",
+                "classification": "supported"
+              },
+              {
+                "claim": "D270 sampling H2 2026, availability in 2027",
+                "classification": "supported"
+              },
+              {
+                "claim": "Maia 200 announced January 2026",
+                "classification": "supported"
+              },
+              {
+                "claim": "Maia 200 purpose-built for inference with ~30% better performance-per-price",
+                "classification": "supported"
+              },
+              {
+                "claim": "Maia 200 in production and rolling out in US Azure regions",
+                "classification": "supported"
+              },
+              {
+                "claim": "Maia 300 coming in 2027 and multi-gigawatt deployments starting 2027",
+                "classification": "supported"
+              },
+              {
+                "claim": "Maia will be primary inference system for Microsoft products",
+                "classification": "supported"
+              },
+              {
+                "claim": "Meta announced four new MTIA generations (300/400/450/500) through 2027",
+                "classification": "supported"
+              },
+              {
+                "claim": "MTIA 300 already in production",
+                "classification": "supported"
+              },
+              {
+                "claim": "Iris is fourth-generation MTIA chip designed with Broadcom, made by TSMC, entering production 2026",
+                "classification": "supported"
+              },
+              {
+                "claim": "Broadcom partnership extended through 2029 starting with >1GW of MTIA compute",
+                "classification": "supported"
+              },
+              {
+                "claim": "Meta targets ~14GW AI compute capacity by 2027",
+                "classification": "supported"
+              },
+              {
+                "claim": "Cerebras WSE-3 in CS-3: ~4T transistors, 900K cores, 44GB on-wafer SRAM",
+                "classification": "supported"
+              },
+              {
+                "claim": "CS-4 Nexus (August 2026) bolts three WSE-3 Turbo wafers into rack system, claims up to 30x faster inference than GPU racks and ~10x throughput-per-watt",
+                "classification": "supported"
+              },
+              {
+                "claim": "Cerebras-AWS cloud deal 2026",
+                "classification": "supported"
+              },
+              {
+                "claim": "Cerebras Nasdaq IPO (CBRS) May 2026",
+                "classification": "supported"
+              },
+              {
+                "claim": "Cerebras claims >21x faster than B200 on Llama 3 70B-class reasoning workloads",
+                "classification": "supported"
+              },
+              {
+                "claim": "Cerebras reported $10B+ OpenAI contract",
+                "classification": "supported"
+              },
+              {
+                "claim": "GB300 NVL72 features 288GB HBM3e",
+                "classification": "unverifiable"
+              },
+              {
+                "claim": "Rubin GPUs NVL72 claim ~1/4 training GPU and ~1/10 inference cost vs GB200 NVL72",
+                "classification": "supported"
+              },
+              {
+                "claim": "Ironwood is inference-optimized",
+                "classification": "supported"
+              },
+              {
+                "claim": "AWS Trn2 instances powered by 16 Trainium2 chips",
+                "classification": "supported"
+              },
+              {
+                "claim": "Trainium3 announced at re:Invent 2025",
+                "classification": "unverifiable"
+              },
+              {
+                "claim": "Cerebras CS-4 first shipments expected to begin current quarter",
+                "classification": "unverifiable"
+              }
+            ]
+          }
+        },
+        {
+          "name": "scope_overreach",
+          "source": "model",
+          "value": 0.0,
+          "metadata": {
+            "reasoning": "The response is tightly scoped: per-company platform summaries, announcements, availability, and positioning for all eight companies, followed by a concise comparison table. The material maps directly to the requested structure; the depth is appropriate and serves the multi-part request."
+          }
+        },
+        {
+          "name": "sufficiency_stopping",
+          "source": "model",
+          "value": 0.75,
+          "metadata": {
+            "reasoning": "The trajectory researched all eight companies with per-company queries, most of which added distinct, useful information (platforms, announcements, availability, positioning). A few queries returned no results and a few overlapping searches for NVIDIA Vera Rubin specs (repeated after an initial failed query) and Intel/Microsoft involved slight redundancy, but most later calls added new material facts. Stopping after eight company tasks was appropriate; minor unnecessary work warrants a modest deduction."
+          }
+        }
+      ]
+    },
+    {
+      "request_id": "req_ac3622df6c4c46dfa2aa5bda997beab0",
+      "metrics": [
+        {
+          "name": "completion",
+          "source": "deterministic",
+          "value": true,
+          "metadata": null
+        },
+        {
+          "name": "tool_calls",
+          "source": "deterministic",
+          "value": 0,
+          "metadata": null
+        },
+        {
+          "name": "llm_calls",
+          "source": "deterministic",
+          "value": 1,
+          "metadata": null
+        },
+        {
+          "name": "latency_seconds",
+          "source": "deterministic",
+          "value": 2.518169,
+          "metadata": null
+        },
+        {
+          "name": "exact_duplicate_calls",
+          "source": "deterministic",
+          "value": 0,
+          "metadata": null
+        },
+        {
+          "name": "unchanged_retries",
+          "source": "deterministic",
+          "value": 0,
+          "metadata": null
+        },
+        {
+          "name": "task_fulfillment",
+          "source": "model",
+          "value": 1.0,
+          "metadata": {
+            "reasoning": "Correct answer, one sentence. The JSON wrapper includes meta-commentary but content itself fulfills request."
+          }
+        },
+        {
+          "name": "requirement_coverage",
+          "source": "model",
+          "value": 1.0,
+          "metadata": {
+            "satisfied": 2,
+            "partial": 0,
+            "unsatisfied": 0,
+            "total": 2,
+            "requirements": [
+              {
+                "requirement": "State the capital of France",
+                "status": "satisfied"
+              },
+              {
+                "requirement": "Answer in one sentence",
+                "status": "satisfied"
+              }
+            ]
+          }
+        },
+        {
+          "name": "supported_claim_rate",
+          "source": "model",
+          "value": 0.0,
+          "metadata": {
+            "supported_claims": 0,
+            "contradicted_claims": 0,
+            "unverifiable_claims": 1,
+            "total_claims": 1,
+            "claims": [
+              {
+                "claim": "The capital of France is Paris",
+                "classification": "unverifiable"
+              }
+            ]
+          }
+        },
+        {
+          "name": "contradicted_claim_rate",
+          "source": "model",
+          "value": 0.0,
+          "metadata": {
+            "supported_claims": 0,
+            "contradicted_claims": 0,
+            "unverifiable_claims": 1,
+            "total_claims": 1,
+            "claims": [
+              {
+                "claim": "The capital of France is Paris",
+                "classification": "unverifiable"
+              }
+            ]
+          }
+        },
+        {
+          "name": "unverifiable_claim_rate",
+          "source": "model",
+          "value": 1.0,
+          "metadata": {
+            "supported_claims": 0,
+            "contradicted_claims": 0,
+            "unverifiable_claims": 1,
+            "total_claims": 1,
+            "claims": [
+              {
+                "claim": "The capital of France is Paris",
+                "classification": "unverifiable"
+              }
+            ]
+          }
+        },
+        {
+          "name": "scope_overreach",
+          "source": "model",
+          "value": 0.0,
+          "metadata": {
+            "reasoning": "The response answers the question in one sentence as requested. The meta-comment 'Simple factual question — no delegation needed' is minimal internal framing, not substantive unnecessary material."
+          }
+        },
+        {
+          "name": "sufficiency_stopping",
+          "source": "model",
+          "value": 1.0,
+          "metadata": {
+            "reasoning": "The trajectory is empty; the model answered a trivial factual question directly with zero tool calls and stopped immediately after giving the correct one-sentence answer. No unnecessary work occurred."
+          }
+        }
+      ]
+    }
+  ]
+}

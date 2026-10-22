@@ -40,7 +40,8 @@ class LLMCaller:
     async def call(self,
                     messages: list[ChatCompletionMessageParam], 
                     tools: list[dict[str,Any]] | None = None,
-                    max_tokens: int = 2048) -> ChatCompletionMessage:
+                    max_tokens: int = 2048,
+                    response_format: dict[str,Any] | None = None) -> ChatCompletionMessage:
                     kwargs: dict[str,Any] = {"model": self.model,
                                              "messages": messages,
                                              "max_tokens": max_tokens,
@@ -53,6 +54,9 @@ class LLMCaller:
                     if tools:
                         kwargs["tools"] = tools
 
+                    if response_format is not None:
+                        kwargs["response_format"] = response_format
+
                     response = await self.client.chat.completions.create(**kwargs)
                     
-                    return response.choices[0].message 
+                    return response.choices[0].message
