@@ -1,7 +1,40 @@
-openai
-python-dotenv
-pytest
-pytest-asyncio
-ddgs
-mcp
-asyncpg
+# KernelAI dependencies
+#
+# Python >= 3.11 (clean installs verified on CPython 3.12 and 3.14).
+# macOS system python3 (3.9) is too old for fastapi/pandas below.
+#
+#   python3 -m venv .venv
+#   source .venv/bin/activate
+#   pip install -r requirements.txt
+#
+# Pins match the working .venv; transitive dependencies are left to pip.
+
+# --- HTTP API (api/app.py, uvicorn in start.sh) ---
+fastapi==0.143.0
+uvicorn==0.53.0
+pydantic==2.13.5
+
+# --- MCP server and client (mcp_server/, worker/clients/mcp.py) ---
+mcp==2.2.0
+
+# --- LLM gateway clients (supervisor/, worker/llm_caller.py, learning/evaluation/) ---
+openai==3.14.1
+httpx==0.28.1
+
+# --- Web search tool (mcp_server/tools/web_search.py) ---
+ddgs==9.16.0
+
+# --- PostgreSQL access (mcp_server/tools/sql_executor.py) ---
+asyncpg==0.31.0
+
+# --- Streamlit UI (ui/) ---
+streamlit==1.65.0
+pandas==3.0.6
+
+# --- Config loading (.env and learning config YAML) ---
+python-dotenv==1.2.3
+PyYAML==6.0.3
+
+# --- Tests ---
+pytest==9.1.1
+pytest-asyncio==1.4.0
