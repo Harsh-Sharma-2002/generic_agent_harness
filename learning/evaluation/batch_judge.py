@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from openai.types.chat import ChatCompletionMessageParam
+
 from learning.evaluation.execution import ExecutionRecord
 from learning.evaluation.judge import (
     SemanticJudge as BaseSemanticJudge,
@@ -200,6 +202,97 @@ class SemanticJudge(BaseSemanticJudge):
     Policy compliance remains a separate targeted operation.
     """
 
+    async def _call(
+        self,
+        prompt: str,
+        response_format: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """
+        Call the batch semantic judge and parse its JSON response.
+
+        This overrides the base judge only to provide better diagnostics
+        when a batched response contains invalid JSON.
+        """
+
+        if response_format is None:
+            response_format = {
+                "type": "json_object",
+            }
+
+        messages: list[
+            ChatCompletionMessageParam
+        ] = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a scoring component inside "
+                    "KernelAI's offline evaluation system. "
+                    "Evaluate only the supplied execution evidence. "
+                    "Do not make learning decisions or recommend "
+                    "policy changes. Follow the requested rubric "
+                    "exactly and return only valid JSON."
+                ),
+            },
+            {
+                "role": "user",
+                "content": prompt,
+            },
+        ]
+
+        response = await self.llm.call(
+            messages=messages,
+            max_tokens=32768,
+            response_format=response_format,
+        )
+
+        content = response.content
+
+        if (
+            content is None
+            or not content.strip()
+        ):
+            raise ValueError(
+                "Batch semantic judge returned empty content."
+            )
+
+        try:
+            parsed = json.loads(
+                content
+            )
+
+        except json.JSONDecodeError as exc:
+            preview_limit = 4000
+
+            if len(content) <= preview_limit:
+                preview = content
+            else:
+                preview = (
+                    content[:preview_limit]
+                    + "\n...[RESPONSE PREVIEW TRUNCATED]..."
+                )
+
+            raise ValueError(
+                "Batch semantic judge returned invalid JSON.\n"
+                f"JSON error: {exc}\n"
+                f"Response length: {len(content)} characters\n"
+                f"Error position: {exc.pos}\n"
+                f"Error line: {exc.lineno}\n"
+                f"Error column: {exc.colno}\n"
+                "Raw response preview:\n"
+                f"{preview}"
+            ) from exc
+
+        if not isinstance(
+            parsed,
+            dict,
+        ):
+            raise ValueError(
+                "Batch semantic judge response must "
+                "be a JSON object."
+            )
+
+        return parsed
+
     async def score_batch(
         self,
         executions: list[ExecutionRecord],
@@ -272,7 +365,8 @@ class SemanticJudge(BaseSemanticJudge):
             payload
         )
 
-        # Uses the EXISTING SemanticJudge._call() unchanged.
+        # Uses the batch-specific _call() above so malformed JSON
+        # includes bounded diagnostic information.
         result = await self._call(
             prompt,
             response_format=(
