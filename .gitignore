@@ -10,3 +10,16 @@ context.json
 notes.md
 vault/.obsidian/
 vault/memory
+
+# Outreach: Gmail credentials and local state (never commit)
+node_modules/
+.gmail-mcp/
+gcp-oauth.keys.json
+credentials.json
+token*.json
+*.keys.json
+paired.json
+ratelimit.json
+audit.jsonl
+.env*
+!.env.example

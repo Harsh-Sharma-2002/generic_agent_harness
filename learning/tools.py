@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import uuid
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -40,6 +41,9 @@ from typing import Any
 from learning.config.loader import load_learning_config
 from learning.evaluation.aggregator import (
     aggregate_evaluations,
+)
+from learning.evaluation.checkpoint import (
+    delete_checkpoint,
 )
 from learning.evaluation.evaluator import (
     ExecutionEvaluation,
@@ -94,6 +98,7 @@ async def evaluate_trace_batch(
     plane: str = "production",
     policy: str | None = None,
     limit: int | None = None,
+    checkpoint_id: str | None = None,
 ) -> dict[str, Any]:
     """
     Evaluate historical KernelAI executions and return aggregate
@@ -128,6 +133,11 @@ async def evaluate_trace_batch(
 
         limit:
             Optional maximum number of recent executions to evaluate.
+
+        checkpoint_id:
+            Optional temporary checkpoint returned by a previous failed
+            evaluation attempt. Reuse it to resume without repeating
+            semantic batches that already completed successfully.
 
     Returns:
         Compact batch-level evidence containing:
@@ -183,13 +193,33 @@ async def evaluate_trace_batch(
             f"minimum is {config.minimum_samples}."
         )
 
+    active_checkpoint_id = (
+        checkpoint_id
+        if checkpoint_id is not None
+        else _new_checkpoint_id()
+    )
+
     evaluator = ExecutionEvaluator()
 
-    evaluations = await evaluator.evaluate_many(
-        executions,
-        policy=policy,
-        batch_size=10,
-    )
+    try:
+        evaluations = await evaluator.evaluate_many(
+            executions,
+            policy=policy,
+            batch_size=10,
+            checkpoint_id=active_checkpoint_id,
+        )
+
+    except Exception as exc:
+        # Keep the temporary checkpoint so the Learning Supervisor can
+        # retry this same evaluation without repeating completed batches.
+        return {
+            "ok": False,
+            "error": (
+                f"{type(exc).__name__}: "
+                f"{exc}"
+            ),
+            "checkpoint_id": active_checkpoint_id,
+        }
 
     evaluation_list = list(
         evaluations
@@ -207,6 +237,12 @@ async def evaluate_trace_batch(
         evaluation_id=evaluation_id,
         plane=trace_plane,
         evaluations=evaluation_list,
+    )
+
+    # The permanent evaluation now contains the complete result, so the
+    # temporary semantic-batch checkpoint is no longer needed.
+    delete_checkpoint(
+        active_checkpoint_id
     )
 
     return {
@@ -1081,6 +1117,14 @@ def _is_numeric(
 # ============================================================
 # Evaluation identifiers
 # ============================================================
+
+
+def _new_checkpoint_id() -> str:
+    """Generate an opaque temporary evaluation checkpoint ID."""
+
+    return (
+        f"ckpt_{uuid.uuid4().hex}"
+    )
 
 
 def _new_evaluation_id() -> str:
