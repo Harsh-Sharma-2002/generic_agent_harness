@@ -1,216 +1,345 @@
 # KernelAI Second Brain V1 — Architecture Invariants
 
-These invariants define the boundaries of KernelAI's Second Brain, skill-discovery, and tool-projection architecture.
+This document is the authoritative V1 contract for KernelAI's Second Brain, skill runtime, Task state, tool authority, and escalation model.
 
-Implementation details may change. These invariants should not change without an explicit architectural decision.
-
----
-
-## 1. System Ownership
-
-> **Root manages the system. Supervisor manages the Request. Worker manages the Task.**
-
-- Root handles system-level admission and lifecycle.
-- Supervisor owns Request decomposition, Task creation, authority assignment, escalation, and aggregation.
-- Worker owns execution strategy within one Task.
-- A Worker may refine methodology but may not expand its own authority.
+Implementation details may change. These boundaries require an explicit architecture decision to change.
 
 ---
 
-## 2. Skills and Memory Are Separate
+# 1. Ownership
+
+> **Root owns the system. Supervisor owns the Request and Task authority. Worker owns Task execution.**
+
+```text
+Root
+    → system lifecycle
+
+Supervisor
+    → Request decomposition
+    → Task creation
+    → domain assignment
+    → escalation decisions
+    → result aggregation
+
+Worker
+    → methodology selection
+    → Task execution
+    → Task progress
+```
+
+Workers cannot expand their own authority.
+
+---
+
+# 2. Skills and Memory Are Separate
 
 > **Skills define HOW to work. Memory defines WHAT the system knows.**
 
-Skills contain:
+Skills contain methodology, procedures, heuristics, and behavioral instructions.
 
-- methodology,
-- procedures,
-- reasoning strategies,
-- behavioral instructions,
-- heuristics.
+Memory contains retrievable information and is handled by a separate Brain/memory interface.
 
-Memory contains retrievable information.
-
-Skill discovery must never implicitly become memory retrieval.
-
-Memory retrieval must use a separate capability/interface.
-
-Workers do not directly mutate shared memory.
+Skill loading must not implicitly become memory retrieval.
 
 ---
 
-## 3. Skills Are Methodology, Not Authority
+# 3. Vault Is the Only Skill Corpus
 
-> **A skill file is instructional content and is never itself a security authority.**
+```text
+vault/skills/
+```
 
-Editable Markdown cannot grant:
+is the sole production source of skill methodology and routing information.
 
-- tools,
-- domains,
-- filesystem access,
-- network access,
-- database access,
-- memory-write access,
-- or any other executable capability.
+The legacy hardcoded skill corpus is retired.
 
-A skill may influence how a Worker reasons.
-
-It cannot expand what the Worker is permitted to execute.
+Python may implement skill-runtime infrastructure, but must not maintain a second skill catalog.
 
 ---
 
-## 4. Skill Metadata Is Runtime-Indexed
+# 4. Vault Hierarchy
 
-Each skill has a stable canonical ID.
+The model-facing hierarchy is:
 
-Example:
+```text
+REGISTRY.md
+    ↓
+DOMAIN.md
+    ↓
+<skill-name>.md
+```
+
+Responsibilities:
+
+```text
+REGISTRY.md
+    → Which domain?
+
+DOMAIN.md
+    → Which methodologies exist in that domain?
+
+<skill-name>.md
+    → How to perform a methodology?
+
+related[]
+    → Useful methodology relationships/navigation.
+```
+
+---
+
+# 5. Skill Identity
+
+Every skill has a canonical ID:
+
+```text
+<domain>.<skill-name>
+```
+
+Examples:
 
 ```text
 coding.systematic-debugging
-teaching.socratic
+teaching.progressive-hint-ladder
 research.web-search
 data.text2sql
 ```
 
-The runtime resolves canonical IDs to skill files.
+The runtime resolves canonical IDs to vault files.
 
-The model never supplies arbitrary filesystem paths for skill loading.
-
-The skill index is runtime infrastructure and is not itself injected wholesale into model context.
+The model never supplies arbitrary filesystem paths.
 
 ---
 
-## 5. YAML `related` Is the Skill Discovery Graph
+# 6. Obsidian Is Visualization, Not Runtime Authority
 
-> **Only structured `related` metadata defines Worker skill-discovery edges.**
-
-Obsidian `[[wikilinks]]` are for:
+Obsidian `[[wikilinks]]` exist for:
 
 - human navigation,
-- visualization,
+- graph visualization,
 - documentation.
 
-They do not create runtime authority or discoverability.
+They have no runtime authority.
 
-For V1, `related` relationships are intra-domain only.
+Runtime semantics come from canonical metadata and trusted runtime state.
 
----
-
-## 6. `related` Is a Soft Relationship
-
-A `related` edge means:
-
-> This methodology may be useful from the current methodology.
-
-It does NOT mean:
-
-- dependency,
-- prerequisite,
-- automatic import,
-- automatic activation,
-- tool grant,
-- authority grant.
-
-The Worker decides whether following the edge is useful.
-
-The runtime decides whether following it is legal.
+```text
+YAML/runtime metadata = machine semantics
+Obsidian links        = human projection
+```
 
 ---
 
-## 7. Supervisor Controls Initial Skill Authority
+# 7. Supervisor Starts With REGISTRY
 
-The Supervisor assigns the initial skills for a Task.
+At Request start, Supervisor receives:
 
-Assigned skills define the Task's initial methodology and executable authority.
+```text
+Supervisor instructions
++
+Request
++
+REGISTRY.md
+```
 
-A Task may receive skills from multiple domains.
+It does NOT initially receive every:
 
-The Task's authorized domains are derived from its assigned skills rather than maintained as an independent source of truth.
+```text
+DOMAIN.md
+skill body
+tool schema
+```
 
 ---
 
-## 8. Assigned Skills Outrank Discovered Skills
+# 8. Supervisor Assigns Domains
 
-Instruction precedence is:
+V1 uses decentralized methodology selection.
+
+Supervisor delegates:
 
 ```text
 Task instruction
-    >
-assigned skills, in deterministic order
-    >
-discovered skills
++
+authorized domain(s)
 ```
 
-A discovered skill supplements the Task.
+Example:
 
-It does not redefine the Task or become equivalent to a Supervisor-assigned skill.
+```json
+{
+  "task": "Diagnose why this service intermittently hangs.",
+  "domains": ["coding"]
+}
+```
+
+Supervisor chooses **what work should happen and what domains the Task may access**.
+
+It does not normally choose the Task methodology.
 
 ---
 
-## 9. Worker Skill Discovery Is Bounded Graph Traversal
+# 9. Worker Receives Assigned DOMAINs
 
-A Worker may load another skill only when:
+At Task start, Worker receives the `DOMAIN.md` for every authorized domain.
 
-1. it is reachable through `related` from an already loaded skill,
-2. it belongs to an authorized domain,
-3. it is not already loaded,
-4. the discovery budget has not been exhausted.
+Example:
 
-The model chooses which legal edge to follow.
+```text
+authorized_domains:
+    coding
+    research
 
-The runtime enforces the graph boundary.
+Worker context:
+    coding/DOMAIN.md
+    research/DOMAIN.md
+```
+
+This allows Task-local methodology selection without another Supervisor discovery round.
+
+---
+
+# 10. Domain Grant Gives Full Methodology Access
+
+> **A Worker may load any skill belonging to an authorized domain.**
+
+Example:
+
+```text
+authorized_domains = {"coding"}
+
+coding.systematic-debugging       ✓
+coding.test-driven-development    ✓
+coding.github                     ✓
+
+research.web-search               ✗
+```
+
+Individual skills do not require additional Supervisor approval.
+
+---
+
+# 11. `related[]` Is Navigation, Not Authority
+
+`related[]` indicates useful methodology relationships.
+
+It does NOT mean:
+
+- permission,
+- dependency,
+- prerequisite,
+- automatic loading,
+- tool grant.
+
+Workers may load an unrelated skill directly when it belongs to an authorized domain.
+
+`related[]` exists to make navigation efficient and meaningful.
+
+---
+
+# 12. One Skill Loading Primitive
+
+Workers use:
+
+```text
+load_skill(skill_id)
+```
+
+Runtime:
+
+```text
+resolve canonical ID
+→ verify domain authorization
+→ read skill lazily
+→ parse/validate
+→ project model-relevant content
+→ return
+```
+
+There are no separate primary/secondary skill-loading APIs.
+
+---
+
+# 13. Skills Are Loaded Lazily
+
+V1 does not parse every full skill at harness startup.
+
+Skills are parsed when requested.
+
+No global parsed-skill cache exists in V1.
+
+Caching may be introduced later if measurements justify it.
+
+---
+
+# 14. Vault Representation ≠ Model Representation
+
+The runtime selectively projects skill content into Worker context.
+
+A loaded skill may expose:
+
+```text
+name
+description
+useful selected metadata
+methodology body
+related methodologies
+```
+
+It should omit model-irrelevant material such as:
+
+```text
+licensing/provenance
+Obsidian visualization sections
+redundant runtime bookkeeping
+irrelevant upstream metadata
+```
+
+The original vault file remains unchanged.
+
+---
+
+# 15. Skills Are Methodology, Not Security Authority
+
+Editable skill Markdown cannot grant:
+
+- domains,
+- tools,
+- filesystem authority,
+- network authority,
+- database authority,
+- memory authority.
+
+Loading a skill changes methodology context only.
+
+---
+
+# 16. Skill Limit
+
+A Task may initially load at most:
+
+```text
+5 skills
+```
+
+across all authorized domains.
+
+The first skill counts.
+
+Duplicate and rejected loads do not consume additional capacity.
+
+---
+
+# 17. Skill-Limit Escalation
+
+Attempting to exceed the skill limit produces Supervisor escalation.
+
+Approved escalation increases the limit by:
+
+```text
++2
+```
 
 Therefore:
-
-> **Skill discovery is LLM-decided traversal over a runtime-enforced graph.**
-
----
-
-## 10. Skill Discovery Is Available During Execution
-
-There is no separate mandatory skill-selection/finalization phase.
-
-A Worker starts executing immediately with its assigned methodology and tools.
-
-If execution reveals a methodological gap, it may call `load_skill()` during execution.
-
-Loading a discovered skill changes instructional context only.
-
-It does not change the Task's tool set.
-
----
-
-## 11. Discovery State Is Task-Local
-
-The runtime tracks, per semantic Task:
-
-```text
-assigned skills
-loaded skills
-discovered skills
-discovery count
-attempt
-escalation count
-handoff
-```
-
-This state is Request-scoped.
-
-It is not global.
-
-It is destroyed when the Request ends.
-
----
-
-## 12. Discovery Budget Is Attempt-Aware and Cumulative
-
-Initial discovery limit:
-
-```text
-Attempt 1 → 5 discovered skills
-```
-
-Each Supervisor-approved escalation increases the total limit by 2:
 
 ```text
 Attempt 1 → 5
@@ -219,679 +348,541 @@ Attempt 3 → 9
 Attempt 4 → 11
 ```
 
-Formula:
+Maximum approved escalations:
 
 ```text
-discovery_limit = 5 + 2 × (attempt - 1)
+3
 ```
 
-Previously discovered skills remain loaded across attempts.
+Maximum attempts:
 
-The discovery count does not reset.
-
-Rejected/invalid skill loads do not consume discovery budget.
-
----
-
-## 13. Tool Discovery Is NOT Skill Discovery
-
-> **`related` exists only for methodology discovery.**
-
-It has no tool-discovery semantics.
-
-KernelAI does not traverse skill relationships in order to dynamically mutate the Worker tool list.
-
-Skill discovery and tool projection are separate mechanisms.
+```text
+4
+```
 
 ---
 
-## 14. Skills Do Not Contain Binding Tool Grants
+# 18. All Authority Expansion Goes Through Supervisor
 
-Portable skill files should remain methodology-focused.
+Worker cannot independently expand:
 
-The authoritative skill-to-tool relationship lives in trusted runtime configuration.
+```text
+domains
+tools/capabilities
+skill limit
+```
+
+Relevant escalation kinds include:
+
+```text
+DOMAIN_REQUIRED
+TOOL_REQUIRED
+SKILL_LIMIT_EXCEEDED
+```
+
+All are handled by Supervisor.
+
+---
+
+# 19. Escalation Is Structured
+
+Escalation explains why execution cannot continue under the current boundary.
 
 Conceptually:
 
 ```text
-skill ID
-    ↓
-trusted grant map
-    ↓
-authorized MCP tool IDs
+Escalation
+├── task_id
+├── attempt
+├── kind
+├── reason
+├── requested_domain?
+├── requested_tool?
+├── requested_skill_limit?
+└── relevant control metadata
 ```
 
-This prevents:
+Supervisor decides:
 
-- editable Markdown from granting capabilities,
-- duplicated tool configuration,
-- provider-specific tool names leaking throughout portable skill content.
+```text
+approve
+deny
+terminate
+```
 
 ---
 
-## 15. Trusted Grant Map Is the Tool Authority
+# 20. TaskState Is Persistent
 
-The trusted runtime grant map is the sole binding between assigned skills and executable tools.
+Task execution state lives under:
+
+```python
+task_states: dict[str, TaskState]
+```
+
+The semantic unit is the Task, not a Worker instance.
+
+Conceptually:
+
+```text
+TaskState
+├── task_id
+├── attempt
+├── instruction
+├── authorized_domains
+│
+├── loaded_skills
+├── skill_limit
+│
+├── progress
+├── findings
+├── artifacts/results
+├── remaining_work
+│
+├── status
+└── escalation/blocking state
+```
+
+Exact implementation fields may evolve.
+
+---
+
+# 21. Workers Are Disposable; Tasks Persist
+
+Escalation does not create a new semantic Task.
+
+```text
+task_123 / attempt 1
+        ↓
+Worker 1 BLOCKED
+        ↓
+Supervisor approves
+        ↓
+attempt += 1
+        ↓
+Worker 2
+        ↓
+task_123 / attempt 2
+```
+
+Both Workers operate on the same cumulative Task state.
+
+---
+
+# 22. Task Progress Survives Escalation
+
+A new Worker receives enough state to continue rather than restart:
+
+```text
+completed work
+findings
+artifacts/results
+remaining work
+loaded skills
+authorized domains
+current limits
+```
+
+TaskState must not become an unbounded raw conversation dump or hidden-reasoning archive.
+
+It stores **resumable work state**.
+
+---
+
+# 23. Worker Owns Progress Mutation
+
+Only the active Worker may modify:
+
+```text
+progress
+findings
+artifacts/results
+remaining work
+loaded skills
+methodology state
+```
+
+Supervisor must not rewrite Worker progress.
+
+This avoids competing agents corrupting Task execution state.
+
+---
+
+# 24. Supervisor Owns Control Mutation
+
+Supervisor may modify control/authority state during escalation:
+
+```text
+authorized domains
+skill limit
+approved tool/capability expansion
+attempt
+continue / deny / terminate
+```
+
+Supervisor does not rewrite accumulated findings.
+
+---
+
+# 25. Trusted Domain Grants Own Tool Authority
+
+Tool authority comes from trusted runtime configuration:
+
+```text
+domain
+→ allowed tools
+```
 
 Conceptually:
 
 ```python
-SKILL_TOOL_GRANTS = {
-    "research.web-search": {
-        "kernel_tools.web_search",
-    },
-    "data.text2sql": {
-        "kernel_tools.sql_executor",
-    },
+TrustedDomainGrants = {
+    "coding": {...},
+    "research": {...},
+    "data": {...},
+    "teaching": {...},
 }
 ```
 
-Missing grants default to no executable tools.
+It does NOT come from:
 
-The vault cannot modify this authority during production execution.
+```text
+REGISTRY.md
+DOMAIN.md
+skill files
+related[]
+Obsidian links
+Worker requests
+```
 
 ---
 
-## 16. Tool IDs Are Namespaced
+# 26. Tool Allocation Is Homogeneous
 
-Runtime tool identity must not rely on ambiguous bare names.
+V1 has no skill-specific tool authority.
+
+The lifecycle is always:
+
+```text
+implement tool
+    ↓
+implement tool guardrails/security
+    ↓
+add tool to trusted domain grant(s)
+    ↓
+Supervisor grants domain
+    ↓
+Task receives corresponding tools
+```
+
+No special allocation mechanism exists for individual skills.
+
+---
+
+# 27. Tools Enforce Their Own Security
+
+A domain grant allows invocation of an interface.
+
+It does not imply unrestricted underlying access.
+
+Tools remain responsible for enforcing their own:
+
+```text
+sandbox boundaries
+filesystem policy
+network policy
+credential isolation
+resource limits
+operation restrictions
+```
+
+Therefore:
+
+```text
+tool granted ≠ unrestricted host authority
+```
+
+---
+
+# 28. Tool Authority Is Derived
+
+Where possible:
+
+```text
+TaskState.authorized_domains
++
+TrustedDomainGrants
+        ↓
+allowed_tools
+```
+
+Do not maintain an independently mutable duplicate tool-authority list.
+
+When Supervisor approves a new domain, allowed tools are recomputed from cumulative domain authority.
+
+---
+
+# 29. Tool Set Is Stable Within an Attempt
+
+A Worker cannot dynamically grant itself new tools during execution.
+
+If a missing capability is required:
+
+```text
+Worker
+→ Escalation
+→ Supervisor
+→ approval
+→ attempt + 1
+→ new Worker
+```
+
+This gives each Worker attempt a stable execution environment.
+
+---
+
+# 30. Tool Catalog Stays Outside Model Context
+
+The complete available tool catalog belongs to runtime memory.
+
+Workers receive only the schemas allowed by their current Task authority.
+
+```text
+available tools
+        ∩
+trusted domain grants
+        =
+Worker tool schemas
+```
+
+Tool dispatch must independently verify authorization.
+
+Schema visibility alone is not the security boundary.
+
+---
+
+# 31. Skills and Grants Are Immutable During Production Requests
+
+Production Workers cannot:
+
+```text
+rewrite skills
+create production skills
+change related[]
+change trusted grants
+```
+
+Production execution treats promoted skills and grants as immutable.
+
+Mutation occurs only through offline/system-management workflows.
+
+---
+
+# 32. Future System Manager Produces Candidates
+
+Future System Manager may analyze production traces and propose:
+
+```text
+candidate skill changes
+candidate routing changes
+candidate domain grants
+```
+
+It does not silently mutate production authority.
 
 Conceptually:
 
 ```text
-server.tool
-```
-
-Examples:
-
-```text
-kernel_tools.web_search
-kernel_tools.sql_executor
-kernel_tools.shell
-
-github.search_code
-github.create_pr
-```
-
-This prevents tools from different MCP servers from shadowing one another.
-
----
-
-## 17. MCP Tool Catalog Stays Outside LLM Context
-
-KernelAI may discover a large number of MCP tool definitions.
-
-The complete catalog belongs in runtime memory.
-
-It must not automatically enter Supervisor or Worker context.
-
-Conceptually:
-
-```text
-MCP servers
+production traces
     ↓
-list_tools()
+System Manager
     ↓
-ToolCatalogSnapshot
+candidate
     ↓
-runtime memory only
-```
-
-The existence of a tool in the catalog does not imply that a Task may use or even see it.
-
----
-
-## 18. Requests Use a Stable Tool-Catalog Snapshot
-
-A Request operates against a stable view of available MCP tools.
-
-The snapshot should be identifiable by a content hash.
-
-The implementation may initially use a Request-scoped catalog or a process-level immutable snapshot pinned by each Request.
-
-The invariant is:
-
-> **Tool schemas must not unpredictably change underneath an active Request.**
-
-Catalog refresh occurs only at a defined boundary.
-
----
-
-## 19. Tool Authority Is Derived at Attempt Start
-
-For each Task attempt:
-
-```text
-assigned skills
+evaluation/security checks
     ↓
-trusted grant map
+human/promotion boundary
     ↓
-Task tool authority
+production
 ```
 
-Tool authority is derived from Supervisor-assigned skills, including skills approved through previous escalations.
+---
 
-Discovered skills do not contribute authority.
+# 33. Skills and Memory Mutation Stay Outside Workers
+
+Workers may eventually use explicitly granted Brain interfaces.
+
+They do not directly mutate shared system memory or production skill definitions.
+
+Shared-state mutation is coordinated above Task execution.
 
 ---
 
-## 20. Tool Schemas Are Progressively Projected
+# 34. Attempts Are First-Class in Traces
 
-KernelAI does not expose every MCP schema to every Worker.
-
-Instead:
+Every Task event must be attributable to:
 
 ```text
-Task tool authority
-        ↓
-ToolCatalogSnapshot
-        ↓
-exact authorized schemas
-        ↓
-Worker context
-```
-
-Therefore a system may know about hundreds of tools while one Worker sees only the few relevant to its assigned capabilities.
-
-> **Tool projection reduces context; it does not create authority.**
-
----
-
-## 21. Tool Set Is Frozen Within an Attempt
-
-Once a Task attempt begins:
-
-> **Its executable tool set does not change.**
-
-Worker skill discovery cannot mutate it.
-
-If additional capability becomes necessary, the Worker must escalate.
-
-This gives each attempt a stable execution environment.
-
----
-
-## 22. Discovered Skills Add Instructions Only
-
-Suppose a Worker discovers:
-
-```text
-coding.test-driven-development
-```
-
-Loading it may add TDD methodology to the Worker context.
-
-It does NOT automatically:
-
-- add shell,
-- add filesystem write,
-- add testing tools,
-- modify tool schemas,
-- widen Task authority.
-
-If the Worker can apply the methodology using its existing tools, it may continue.
-
-If it genuinely requires unavailable capability, it escalates.
-
----
-
-## 23. Tool Availability Is Enforced at Dispatch
-
-Hiding unauthorized tool schemas is not the security boundary.
-
-The runtime must enforce:
-
-```text
-requested tool ∈ Task tool authority
-```
-
-when executing the call.
-
-Therefore even if a model hallucinates or somehow references another tool, the runtime rejects it.
-
----
-
-## 24. Capability Expansion Requires Supervisor Approval
-
-If a Worker requires:
-
-- another domain,
-- another Supervisor-assigned skill,
-- another executable capability,
-
-it cannot grant that authority to itself.
-
-It returns a structured `BLOCKED` outcome.
-
-The Supervisor decides whether to approve the expansion.
-
----
-
-## 25. BLOCKED Is Recoverable
-
-A blocked Task returns structured information such as:
-
-```text
-kind:
-    capability
-    methodology
-    discovery_budget_exhausted
-
-need:
-    free-text explanation
-
-requested_skill:
-    optional
-
-requested_domain:
-    optional
-
-handoff:
-    bounded partial state
-```
-
-The Worker is not required to know a canonical skill ID it has never been shown.
-
----
-
-## 26. Configuration Failure Is Not Capability Escalation
-
-Examples:
-
-- trusted grant references nonexistent MCP tool,
-- malformed skill metadata,
-- broken runtime mapping,
-- invalid tool catalog entry.
-
-These are configuration/runtime failures.
-
-They must not consume Supervisor escalation budget.
-
-The Supervisor cannot fix broken infrastructure by granting more authority.
-
----
-
-## 27. Semantic Task Identity Survives Escalation
-
-Supervisor-approved escalation retains the same:
-
-```text
+request_id
 task_id
-```
-
-and increments:
-
-```text
 attempt
 ```
 
-Example:
+Worker identity may additionally be recorded.
+
+Offline reconstruction must distinguish multiple attempts of the same semantic Task.
+
+---
+
+# 35. Routing and Escalation Must Be Observable
+
+Traces must allow reconstruction of:
 
 ```text
-task_123 / attempt 1
-task_123 / attempt 2
-task_123 / attempt 3
+domains assigned
+DOMAINs exposed
+skills loaded
+skill load order
+skill-limit usage
+tools exposed
+tools called
+Task progress across attempts
+escalation reason
+requested expansion
+Supervisor decision
+Task outcome
 ```
 
-`task_id` identifies the semantic work.
-
-`attempt` identifies an execution under a particular authority boundary.
+This data supports both debugging and offline learning.
 
 ---
 
-## 28. Authority Accumulates Across Approved Attempts
+# 36. V1 Is an Explicit Routing Experiment
 
-When the Supervisor approves additional capability:
+V1 intentionally uses:
 
 ```text
-previous assigned skills
-+
-new approved skills
+Supervisor → domains
+Worker     → skills
 ```
 
-become the assigned set for the next attempt.
+instead of centralized Supervisor skill selection.
 
-Tool authority is recomputed from that cumulative assigned set.
+Hypothesis:
 
-Previously approved capabilities are retained.
+> Task-local methodology selection with smaller domain-specific contexts and concurrent Worker routing can improve routing quality and potentially critical-path latency at the cost of higher aggregate inference/token usage.
 
-This prevents repeated escalation for capabilities already needed earlier in the Task.
-
----
-
-## 29. Maximum Three Approved Escalations
-
-One semantic Task may receive at most:
-
-```text
-3 Supervisor-approved escalations
-```
-
-Therefore:
-
-```text
-maximum attempts = 4
-```
-
-Denied escalation does not consume the approved-escalation count.
-
-Once the limit is exhausted, another BLOCKED result becomes terminal for that semantic Task.
+The runtime should remain measurable enough to compare this against centralized routing using the same Request corpus.
 
 ---
 
-## 30. Handoff Preserves Work, Not Hidden Reasoning
-
-When a Task continues into another attempt, the runtime preserves a bounded handoff containing results such as:
-
-```text
-completed work
-facts/findings
-remaining work
-blocking need
-```
-
-The handoff must not become a dump of the Worker's complete context or private reasoning.
-
-The runtime owns the preserved handoff.
-
-The Supervisor may approve new authority but must not rewrite previous Worker state.
-
----
-
-## 31. Discovery State Survives Escalation
-
-Across attempts of the same semantic Task, preserve:
-
-```text
-loaded skills
-discovered skills
-discovery count
-relevant discovery state
-handoff
-```
-
-This prevents the replacement Worker from spending iterations rediscovering methodologies already used by its predecessor.
-
-Discovered skills remain discovered; escalation does not automatically promote them to assigned status.
-
----
-
-## 32. Attempts Must Be First-Class in Traces
-
-Every Task-scoped runtime event must be attributable to:
-
-```text
-(task_id, attempt)
-```
-
-Offline reconstruction must not group only by `task_id`.
-
-Otherwise multiple attempts of one semantic Task become indistinguishable.
-
----
-
-## 33. Skill and Tool Versions Must Be Reconstructable
-
-Runtime traces should identify the artifacts actually used through hashes/version identifiers.
-
-Relevant data includes:
-
-```text
-skill content hashes
-domain/index hashes
-tool catalog snapshot hash
-exposed tool schema hashes
-```
-
-The trace does not need to duplicate complete skill bodies or schemas.
-
----
-
-## 34. Production Skills Are Immutable During Requests
-
-Skill mutation and normal Request handling do not overlap.
-
-Production execution treats the skill corpus as immutable.
-
-Skill modifications happen in the offline phase.
-
-After promotion, runtime indexes/catalogs are refreshed at a defined boundary.
-
----
-
-## 35. Workers Cannot Mutate Skills
-
-Production Workers may:
-
-- read assigned skills,
-- discover allowed related skills,
-- execute Tasks.
-
-They may not:
-
-- rewrite skills,
-- create production skills,
-- change relationships,
-- change trusted grants.
-
-Skill evolution belongs to the offline learning/management boundary.
-
----
-
-## 36. Workers Cannot Mutate Shared Memory
-
-Workers may eventually read memory through explicitly granted Brain capabilities.
-
-They do not independently write shared memory.
-
-Memory mutation is coordinated above the Task level after Task results are available.
-
-This prevents parallel Workers from racing over shared knowledge.
-
----
-
-## 37. Observability Must Preserve Decision Boundaries
-
-The runtime must make it possible to reconstruct:
-
-```text
-what domains/skills were available
-what skills were assigned
-what skills were discovered
-which related edge was followed
-which tools were exposed
-which tools were actually called
-what attempt executed them
-why a Task became BLOCKED
-what escalation was requested
-whether it was approved
-```
-
-Observability should record decisions and artifact identities, not duplicate entire prompts unnecessarily.
-
----
-
-## 38. Progressive Disclosure Is About Context, Not Security
+# 37. Progressive Disclosure and Security Are Separate
 
 Progressive disclosure answers:
 
-> What information should enter the model context now?
+> What information should enter model context?
 
 Security answers:
 
-> What is this Task actually authorized to execute?
-
-These must remain separate.
+> What may this Task actually execute?
 
 Therefore:
 
 ```text
-not visible
-≠
-not authorized
-
-visible
-≠
-authorized
+visible     ≠ authorized
+not visible ≠ unauthorized
 ```
 
-Runtime enforcement remains authoritative.
+Runtime authority remains authoritative.
 
 ---
 
-## 39. Skill Discovery and Tool Projection Have Different Control Models
+# 38. No Premature Optimization in V1
 
-Skill discovery requires semantic reasoning:
-
-```text
-LLM
-→ choose methodology
-```
-
-Tool projection does not:
+Do not add yet:
 
 ```text
-runtime
-→ derive schemas from assigned authority
+global skill cache
+Neo4j
+embeddings/vector search
+semantic skill search
+learned routing
+autonomous cross-domain discovery
+skill-specific tool grants
+dynamic tool authority
+System Manager live mutation
 ```
 
-Therefore KernelAI should not spend LLM iterations searching the tool catalog when deterministic skill-derived projection is sufficient.
-
-LLM-driven tool search remains a possible future fallback if production traces show that skill-derived authority cannot predict necessary tools.
+Introduce these only when traces demonstrate a concrete need.
 
 ---
 
-## 40. Filesystem Organization Does Not Define Runtime Hierarchy
-
-Imported skill packs may contain arbitrary organizational subdirectories.
-
-Those directories do not automatically become agent routing levels.
-
-Runtime hierarchy is defined by explicit metadata/indexes.
-
-Therefore an imported structure such as:
+# Runtime Flow
 
 ```text
-coding/
-└── software-development/
-    └── debugging/
-        └── systematic-debugging/
-            └── SKILL.md
-```
-
-does not imply:
-
-```text
-coding
-→ software-development
-→ debugging
-→ systematic-debugging
-```
-
-unless KernelAI explicitly defines those as routing levels.
-
----
-
-## 41. Standard Skill Bundles Should Remain Portable
-
-Where practical, imported skills should retain the standard bundle form:
-
-```text
-skill-name/
-├── SKILL.md
-├── references/
-├── scripts/
-└── assets/
-```
-
-KernelAI-specific routing/security infrastructure should wrap these bundles rather than unnecessarily rewriting their methodology.
-
-This keeps the skill corpus reusable across compatible agent runtimes.
-
----
-
-## 42. No Global Routing Cache in V1
-
-Skill-routing caches are deferred.
-
-V1 favors deterministic context construction and reproducible routing.
-
-Caching may be added later if traces demonstrate repeated routing/discovery cost is materially significant.
-
----
-
-## 43. V1 Must Remain Measurable
-
-The purpose of the POC is not merely to demonstrate that the architecture runs.
-
-It should let us measure:
-
-- routing accuracy,
-- skill-discovery usefulness,
-- unnecessary skill loading,
-- exposed tool-schema token count,
-- exposed-but-unused tools,
-- tool-selection failures,
-- capability escalations,
-- methodology escalations,
-- duplicate work across attempts,
-- effectiveness of handoffs,
-- context growth,
-- latency added by discovery.
-
-Future architecture changes should be driven by these traces rather than hypothetical scale problems.
-
----
-
-# Core Summary
-
-The architecture can be reduced to five fundamental invariants:
-
-### 1. Supervisor controls authority.
-
-```text
+REQUEST
+   ↓
 Supervisor
-→ assigned skills
-→ Task authority
+   ├── Request
+   └── REGISTRY.md
+   ↓
+decompose
+   ↓
+Task + authorized domains
+   ↓
+TaskState[task_id]
+   ↓
+TrustedDomainGrants
+   ↓
+allowed tools
+   ↓
+Worker
+   ├── TaskState
+   ├── DOMAIN.md(s)
+   └── allowed tool schemas
+   ↓
+load_skill(skill_id)
+   ↓
+lazy parse + selective projection
+   ↓
+execute
+   ↓
+load additional skills as needed
+   ↓
+complete
+   │
+   └── boundary reached
+          ↓
+       Escalation
+          ↓
+       Supervisor
+          ↓
+      approve / deny
+          ↓
+      same task_id
+      attempt + 1
+          ↓
+       new Worker
 ```
 
-### 2. Worker controls methodology inside that authority.
+# Core Invariants
 
-```text
-assigned skills
-→ related discovery
-→ additional instructions
-```
+1. **Root owns the system; Supervisor owns Request/authority; Worker owns Task execution.**
+2. **Vault is the only skill corpus.**
+3. **Supervisor assigns domains; Worker chooses skills.**
+4. **An authorized domain gives full methodology access within that domain.**
+5. **`related[]` guides navigation; it does not grant authority.**
+6. **Skills define methodology, never security authority.**
+7. **Workers may load at most five skills initially; expansion requires Supervisor escalation.**
+8. **Task progress persists under `task_id`; Workers are replaceable.**
+9. **Worker owns progress mutations; Supervisor owns authority/control mutations.**
+10. **Trusted domain grants are the sole domain→tool authority mapping.**
+11. **Tools enforce their own security boundaries.**
+12. **Leaving the current domain/tool/skill-limit boundary requires Supervisor escalation.**
+13. **Production skills and grants are immutable during Requests.**
+14. **Future System Manager proposes candidates; it does not silently mutate production.**
+15. **Every architectural decision remains observable and evaluable.**
 
-### 3. Discovery never creates authority.
+> **The Supervisor decides what a Task may access; the Worker decides how to perform it; TaskState preserves the work; trusted grants determine executable interfaces.**
 
-```text
-discover skill
-≠
-gain tools
-≠
-gain domain
-```
-
-### 4. Tools are deterministically projected from approved authority.
-
-```text
-assigned skills
-→ trusted grant map
-→ tool catalog
-→ exact schemas
-```
-
-### 5. Leaving the authority boundary requires escalation.
-
-```text
-Worker needs more authority
-→ BLOCKED
-→ Supervisor
-→ approve / deny
-→ new attempt
-```
-
-Or, in one line:
-
-> **The Supervisor defines what a Task may do; the Worker decides how to do it; the runtime determines what concrete interfaces that authority exposes.**
+Supervisor Restart Guidance: On an approved escalation, the Supervisor may provide a ≤150-character advisory suggestion to the next Worker. It cannot modify TaskState or grant/override authority.
