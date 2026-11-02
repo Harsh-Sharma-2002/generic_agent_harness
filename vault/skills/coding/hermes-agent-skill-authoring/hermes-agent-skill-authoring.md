@@ -222,3 +222,7 @@ A skill exists to make the agent's process more predictable — the agent reliab
 - [ ] Tests at `tests/skills/test_<skill>_skill.py` pass under `scripts/run_tests.sh`
 - [ ] Docs regenerated with scope discipline; sidebar has exactly one entry for the slug
 - [ ] `git add` + commit on the intended branch; PR opened
+
+## Related Skills
+
+- [[skills/coding/requesting-code-review/requesting-code-review|coding.requesting-code-review]]

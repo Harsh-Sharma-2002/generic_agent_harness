@@ -329,3 +329,8 @@ debug> pause
 debug> bt
 # Now you see the stuck frame
 ```
+
+## Related Skills
+
+- [[skills/coding/systematic-debugging/systematic-debugging|coding.systematic-debugging]]
+- [[skills/coding/python-debugpy/python-debugpy|coding.python-debugpy]]

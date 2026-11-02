@@ -419,3 +419,7 @@ From debugging sessions:
 - New bugs introduced: Near zero vs common
 
 **No shortcuts. No guessing. Systematic always wins.**
+
+## Related Skills
+
+- [[skills/coding/test-driven-development/test-driven-development|coding.test-driven-development]]

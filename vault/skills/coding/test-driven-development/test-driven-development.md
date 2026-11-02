@@ -370,3 +370,7 @@ Otherwise → not TDD
 ```
 
 No exceptions without the user's explicit permission.
+
+## Related Skills
+
+- [[skills/coding/systematic-debugging/systematic-debugging|coding.systematic-debugging]]

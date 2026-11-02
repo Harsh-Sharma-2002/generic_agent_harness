@@ -253,3 +253,9 @@ Overall: passing teach-back. Score: 3/3/2. The only revision I'd suggest is a on
 3. **The scoring dimensions are approximate and require subject-domain knowledge.** "Misconception risk" in particular requires the AI to know not only whether the learner's explanation is correct but whether it could produce incorrect inferences in a non-expert listener. This is a sophisticated judgment that depends on the AI's accuracy in the specific subject domain.
 
 4. **The teach-back format is more effective for some content types than others.** It works exceptionally well for conceptual material with clear mechanisms and relationships (biology, physics, economics). It is less effective for procedural skills (calculations, code execution) and highly contextual material (literary analysis, historical interpretation) where the "correct explanation" is less well-defined.
+
+## Related Skills
+
+- [[skills/teaching/explain-first-interrogator/explain-first-interrogator|teaching.explain-first-interrogator]]
+- [[skills/teaching/transfer-bridge/transfer-bridge|teaching.transfer-bridge]]
+- [[skills/teaching/srl-session-wrapper/srl-session-wrapper|teaching.srl-session-wrapper]]

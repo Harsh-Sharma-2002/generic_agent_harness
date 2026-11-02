@@ -23,7 +23,7 @@ The presence of an educational topic is not sufficient. A Task whose subject mat
 
 ## Skills
 
-### teaching.ai-claim-checker
+### [[skills/teaching/ai-claim-checker/ai-claim-checker|teaching.ai-claim-checker]]
 
 **Use when:** A substantive AI-generated explanation has been given and the learner should treat it as a claim to evaluate rather than truth to absorb.
 
@@ -31,7 +31,7 @@ Requires a checking plan from the learner: name a claim worth checking, propose 
 
 **Avoid when:** No AI-generated claim is in play and the objective is the learner's own reasoning; use `teaching.explain-first-interrogator`.
 
-### teaching.confidence-calibration-check
+### [[skills/teaching/confidence-calibration-check/confidence-calibration-check|teaching.confidence-calibration-check]]
 
 **Use when:** The point is the accuracy of the learner's self-assessment — overconfidence or underconfidence relative to demonstrated performance.
 
@@ -39,13 +39,13 @@ Captures a confidence rating before an attempt and again after feedback, then co
 
 **Avoid when:** The objective is content review rather than self-assessment accuracy; use `teaching.retrieve-first-gate`.
 
-### teaching.explain-first-interrogator
+### [[skills/teaching/explain-first-interrogator/explain-first-interrogator|teaching.explain-first-interrogator]]
 
 **Use when:** The learner should articulate a concept or their reasoning in their own words before the AI evaluates, corrects, or extends it.
 
 Gates AI contribution behind the learner's own explanation, then probes the weakest part of it while preserving learner ownership.
 
-### teaching.fading-manager
+### [[skills/teaching/fading-manager/fading-manager|teaching.fading-manager]]
 
 **Use when:** Competence is being demonstrated across sessions and the amount of support should be reduced accordingly.
 
@@ -53,7 +53,7 @@ Systematically withdraws scaffolding as performance supports it, names each tran
 
 **Avoid when:** The Task concerns a single session's plan, monitoring, and reflection; use `teaching.srl-session-wrapper`.
 
-### teaching.productive-failure-protocol
+### [[skills/teaching/productive-failure-protocol/productive-failure-protocol|teaching.productive-failure-protocol]]
 
 **Use when:** A problem is novel and genuinely beyond current competence, and exploration before instruction is the point.
 
@@ -61,7 +61,7 @@ Stages contrasting attempted approaches inside an agreed finite window before co
 
 **Avoid when:** The learner is already working a problem and needs help progressing; use `teaching.progressive-hint-ladder`.
 
-### teaching.progressive-hint-ladder
+### [[skills/teaching/progressive-hint-ladder/progressive-hint-ladder|teaching.progressive-hint-ladder]]
 
 **Use when:** A learner is stuck mid-problem and should be helped forward without being handed the answer.
 
@@ -69,7 +69,7 @@ Provides graduated assistance from an abstract nudge toward a near-complete scaf
 
 **Avoid when:** The learner cannot say what they are stuck on; use `teaching.stuck-and-error-diagnosis-coach` first.
 
-### teaching.retrieve-first-gate
+### [[skills/teaching/retrieve-first-gate/retrieve-first-gate|teaching.retrieve-first-gate]]
 
 **Use when:** The learner is reviewing previously encountered material and help should be structured around what they actually recall.
 
@@ -77,7 +77,7 @@ Invites free recall with a confidence rating before any explanation, then maps w
 
 **Avoid when:** The material is new to the learner; foundation teaching is appropriate instead.
 
-### teaching.srl-session-wrapper
+### [[skills/teaching/srl-session-wrapper/srl-session-wrapper|teaching.srl-session-wrapper]]
 
 **Use when:** A study session should be structured around planning, monitoring, and reflecting.
 
@@ -85,13 +85,13 @@ Wraps the session in a set goal, a mid-session check of whether the approach is 
 
 **Avoid when:** The review spans many past sessions; use `teaching.weekly-agency-review`.
 
-### teaching.stuck-and-error-diagnosis-coach
+### [[skills/teaching/stuck-and-error-diagnosis-coach/stuck-and-error-diagnosis-coach|teaching.stuck-and-error-diagnosis-coach]]
 
 **Use when:** The learner got something wrong or is stuck and cannot locate where it breaks down, and targeted help requires that diagnosis first.
 
 Requires the learner to name what they tried, where it breaks down, and what kind of error it looks like, then structures help around their diagnosis.
 
-### teaching.teach-back-evaluator
+### [[skills/teaching/teach-back-evaluator/teach-back-evaluator|teaching.teach-back-evaluator]]
 
 **Use when:** The learner's explanation of a concept should be tested by having them teach it.
 
@@ -99,7 +99,7 @@ Learns from the learner in a curious-novice role, asks clarifying questions that
 
 **Avoid when:** The question is whether the knowledge applies somewhere new; use `teaching.transfer-bridge`.
 
-### teaching.transfer-bridge
+### [[skills/teaching/transfer-bridge/transfer-bridge|teaching.transfer-bridge]]
 
 **Use when:** The learner has demonstrated understanding and the question is whether it is portable beyond the context where it was learned.
 
@@ -107,7 +107,7 @@ Presents near-transfer and far-transfer challenges and asks what is the same, wh
 
 **Avoid when:** The question is explanation quality rather than application; use `teaching.teach-back-evaluator`.
 
-### teaching.unassisted-evidence-checkpoint
+### [[skills/teaching/unassisted-evidence-checkpoint/unassisted-evidence-checkpoint|teaching.unassisted-evidence-checkpoint]]
 
 **Use when:** After scaffolded practice, the learner's performance with no help at all needs to be observed.
 
@@ -115,7 +115,7 @@ Schedules an unaided attempt with no hints or evaluative feedback and records it
 
 **Avoid when:** The session is still scaffolded and assistance is expected; use `teaching.progressive-hint-ladder`.
 
-### teaching.weekly-agency-review
+### [[skills/teaching/weekly-agency-review/weekly-agency-review|teaching.weekly-agency-review]]
 
 **Use when:** A week or multi-session period should be reviewed against accumulated evidence of how the learner studied.
 

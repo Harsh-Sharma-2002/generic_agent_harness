@@ -234,3 +234,10 @@ Farther application in a computing context: A fictional cluster rents 10 identic
 3. **Transfer success on AI-facilitated problems does not guarantee unassisted transfer.** The presence of the AI bridge (questions, framing, structural hints) may enable transfer that wouldn't occur independently. This is partially addressed by pairing with 20-11 (Unassisted Evidence Checkpoint) and by asking the learner to generate their own third example.
 
 4. **The skill is most valuable for conceptual and principle-based knowledge.** Procedural skills (arithmetic operations, grammar rules) transfer via practice; the transfer bridge is most valuable for conceptual structures, theories, frameworks, and models where the "same principle, different domain" question is meaningful.
+
+## Related Skills
+
+- [[skills/teaching/retrieve-first-gate/retrieve-first-gate|teaching.retrieve-first-gate]]
+- [[skills/teaching/explain-first-interrogator/explain-first-interrogator|teaching.explain-first-interrogator]]
+- [[skills/teaching/productive-failure-protocol/productive-failure-protocol|teaching.productive-failure-protocol]]
+- [[skills/teaching/unassisted-evidence-checkpoint/unassisted-evidence-checkpoint|teaching.unassisted-evidence-checkpoint]]

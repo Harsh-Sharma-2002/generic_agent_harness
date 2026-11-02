@@ -280,3 +280,10 @@ Assistance tag: scaffolded
 3. **Goal specificity develops over time.** Early sessions may produce vague goals even with prompting. This is normal and improving goal quality is itself a learning outcome — learners get better at setting specific goals as they develop metacognitive awareness. The skill should not demand perfect goals on first use.
 
 4. **The mid-session check interrupts flow.** Some learners experience genuine deep focus and resent interruption. The "30 seconds" framing is important — the check should be lightweight enough that it doesn't break concentration, just re-orients. If a learner consistently doesn't want mid-session interruption, use opening and closing only; the relative benefit of these modes is not established for this script.
+
+## Related Skills
+
+- [[skills/teaching/confidence-calibration-check/confidence-calibration-check|teaching.confidence-calibration-check]]
+- [[skills/teaching/unassisted-evidence-checkpoint/unassisted-evidence-checkpoint|teaching.unassisted-evidence-checkpoint]]
+- [[skills/teaching/weekly-agency-review/weekly-agency-review|teaching.weekly-agency-review]]
+- [[skills/teaching/fading-manager/fading-manager|teaching.fading-manager]]

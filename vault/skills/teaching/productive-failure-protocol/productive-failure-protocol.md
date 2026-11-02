@@ -232,3 +232,10 @@ Quick transfer check: three students score 70, 70, 70. Three others score 60, 70
 3. **Consolidation quality is critical and difficult.** Kapur (2016) is explicit: productive failure only works when the consolidation explicitly references the exploration attempts. Generic instruction that doesn't connect to the learner's specific attempts produces the same gains as direct instruction without the exploration. The AI must read the actual attempts and reference them specifically.
 
 4. **This skill requires more time than direct instruction.** Two exploration phases plus consolidation may take 2–3x as long as a standard explanation. This is a genuine cost — worth it for core concepts, not worth it for every topic in every session.
+
+## Related Skills
+
+- [[skills/teaching/progressive-hint-ladder/progressive-hint-ladder|teaching.progressive-hint-ladder]]
+- [[skills/teaching/stuck-and-error-diagnosis-coach/stuck-and-error-diagnosis-coach|teaching.stuck-and-error-diagnosis-coach]]
+- [[skills/teaching/transfer-bridge/transfer-bridge|teaching.transfer-bridge]]
+- [[skills/teaching/srl-session-wrapper/srl-session-wrapper|teaching.srl-session-wrapper]]

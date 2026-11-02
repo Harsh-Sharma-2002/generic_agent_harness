@@ -261,3 +261,10 @@ What was the useful step there — what unlocked it?
 3. **Hint-abuse detection is approximate.** Rapid escalation requests are the main signal, but some learners genuinely think fast and need little engagement time with each hint. The reflection requirement ("what did that tell you?") is the safeguard, but it adds friction that well-calibrated learners may find annoying.
 
 4. **The "no full answer" rule can frustrate learners who are time-constrained.** A learner with an assignment due in 30 minutes may experience the hint ladder as an obstacle. The skill is calibrated for self-determined learners building genuine capability; it is less appropriate as a homework helper when the primary goal is task completion.
+
+## Related Skills
+
+- [[skills/teaching/retrieve-first-gate/retrieve-first-gate|teaching.retrieve-first-gate]]
+- [[skills/teaching/stuck-and-error-diagnosis-coach/stuck-and-error-diagnosis-coach|teaching.stuck-and-error-diagnosis-coach]]
+- [[skills/teaching/productive-failure-protocol/productive-failure-protocol|teaching.productive-failure-protocol]]
+- [[skills/teaching/unassisted-evidence-checkpoint/unassisted-evidence-checkpoint|teaching.unassisted-evidence-checkpoint]]

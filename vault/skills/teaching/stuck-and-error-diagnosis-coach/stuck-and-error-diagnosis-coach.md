@@ -250,3 +250,10 @@ Wait — I divided them the wrong way round didn't I.
 3. **The diagnosis step adds time.** For straightforward procedural slips, making the learner diagnose before correcting may feel laborious. The skill is calibrated for errors that have some learning value in the analysis — it is less useful for typos or obvious arithmetic slips where the value of the correction outweighs the value of the diagnostic process.
 
 4. **The skill relies on the learner sharing their actual attempted work.** If the learner only describes their answer without showing working, the diagnostic step is significantly harder. The skill works best when learners share full working — the AI should prompt for this if it's missing.
+
+## Related Skills
+
+- [[skills/teaching/progressive-hint-ladder/progressive-hint-ladder|teaching.progressive-hint-ladder]]
+- [[skills/teaching/confidence-calibration-check/confidence-calibration-check|teaching.confidence-calibration-check]]
+- [[skills/teaching/productive-failure-protocol/productive-failure-protocol|teaching.productive-failure-protocol]]
+- [[skills/teaching/unassisted-evidence-checkpoint/unassisted-evidence-checkpoint|teaching.unassisted-evidence-checkpoint]]

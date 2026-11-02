@@ -24,7 +24,7 @@ for any of these 13 skills, so none were copied.
 CC BY-SA 4.0 requires that changes be indicated. The following changes were
 made, and **only** the following:
 
-1. **Frontmatter — added KernelAI canonical fields.** Every `SKILL.md` gained an
+1. **Frontmatter — added KernelAI canonical fields.** Every skill note gained an
    `id:` key (`teaching.<skill-name>`) and a `related:` list. The `related`
    entries mirror that file's existing upstream `chains_well_with` list exactly,
    in the same order and direction, with a `description` explaining why each
@@ -49,7 +49,7 @@ Everything else is unmodified:
 ## ShareAlike obligation
 
 These skills are licensed **CC BY-SA 4.0**, whose ShareAlike term requires that
-adaptations be distributed under the same licence. The adapted `SKILL.md` files
+adaptations be distributed under the same licence. The adapted skill notes
 in this directory therefore remain CC BY-SA 4.0. Any redistribution of this
 directory, or of further modifications to it, must carry the same licence and
 the attribution above. This is a different licence from the MIT terms that

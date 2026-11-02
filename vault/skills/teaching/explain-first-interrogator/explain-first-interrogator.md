@@ -216,3 +216,10 @@ Now give me your cleaner explanation, from scratch. What would you say now?
 3. **Mechanical or textbook-perfect explanations are hard to probe without seeming arbitrary.** If a learner correctly reproduces a textbook definition, probing whether they "really understand it" requires introducing variation or edge cases, which can feel like the goalposts are moving. The skill should make this explicit: "Let me check the understanding behind the words."
 
 4. **Self-explanation benefits diminish when explanations are very short.** A learner who gives a one-sentence answer that happens to be correct has technically satisfied the explain-first gate without deep cognitive engagement. The AI should probe for elaboration — "can you walk me through why that's true?" — even when the initial answer is correct.
+
+## Related Skills
+
+- [[skills/teaching/retrieve-first-gate/retrieve-first-gate|teaching.retrieve-first-gate]]
+- [[skills/teaching/stuck-and-error-diagnosis-coach/stuck-and-error-diagnosis-coach|teaching.stuck-and-error-diagnosis-coach]]
+- [[skills/teaching/transfer-bridge/transfer-bridge|teaching.transfer-bridge]]
+- [[skills/teaching/teach-back-evaluator/teach-back-evaluator|teaching.teach-back-evaluator]]

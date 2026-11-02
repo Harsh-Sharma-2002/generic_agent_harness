@@ -264,3 +264,11 @@ What was different about trying it alone?
 3. **A single checkpoint is insufficient to characterise a learner's independent capability.** One unassisted problem is a data point, not a reliable measure. The pattern across multiple sessions — consistent gaps, improving independence — is more informative than any single checkpoint result.
 
 4. **An independent attempt can feel exposing.** Preserve the no-target-skill-help condition only while the learner chooses it; offer defer/stop or assisted resume without pressure. This protects honest tags without requiring distress to continue.
+
+## Related Skills
+
+- [[skills/teaching/retrieve-first-gate/retrieve-first-gate|teaching.retrieve-first-gate]]
+- [[skills/teaching/confidence-calibration-check/confidence-calibration-check|teaching.confidence-calibration-check]]
+- [[skills/teaching/transfer-bridge/transfer-bridge|teaching.transfer-bridge]]
+- [[skills/teaching/srl-session-wrapper/srl-session-wrapper|teaching.srl-session-wrapper]]
+- [[skills/teaching/weekly-agency-review/weekly-agency-review|teaching.weekly-agency-review]]

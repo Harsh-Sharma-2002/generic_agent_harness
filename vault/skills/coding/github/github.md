@@ -66,3 +66,8 @@ Supporting assets: `scripts/gh-env.sh` + `scripts/git-credential-token.py`
 - The workflow's own reference file defines done for that task.
 - Cross-cutting: every claim about remote state (CI, merge, release,
   issue state) is backed by a fresh `gh` read, never memory.
+
+## Related Skills
+
+- [[skills/coding/codebase-inspection/codebase-inspection|coding.codebase-inspection]]
+- [[skills/coding/requesting-code-review/requesting-code-review|coding.requesting-code-review]]

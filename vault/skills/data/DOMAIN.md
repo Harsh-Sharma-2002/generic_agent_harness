@@ -14,7 +14,7 @@ Use this domain when the Task's answer must come from data stored in the databas
 
 ## Skills
 
-### data.text2sql
+### [[skills/data/text2sql/text2sql|data.text2sql]]
 
 **Use when:** The Task asks a question whose answer must be derived from the connected PostgreSQL database.
 

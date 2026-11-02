@@ -229,3 +229,10 @@ Now let me check: can you reconstruct the basic equation in words? Inputs → ou
 3. **The skill cannot enforce that the learner has not looked at their notes.** It relies on honest participation. If the learner pastes from materials, the phrasing detection is a heuristic, not a guarantee. The skill is designed for self-determined learners; it is not suitable as an assessment instrument.
 
 4. **Confidence ratings are self-report data and subject to strategic inflation or deflation.** Some learners habitually underrate (anxiety), others overrate (overconfidence). These patterns are useful evidence but should not be taken as literal measures of knowledge.
+
+## Related Skills
+
+- [[skills/teaching/explain-first-interrogator/explain-first-interrogator|teaching.explain-first-interrogator]]
+- [[skills/teaching/confidence-calibration-check/confidence-calibration-check|teaching.confidence-calibration-check]]
+- [[skills/teaching/transfer-bridge/transfer-bridge|teaching.transfer-bridge]]
+- [[skills/teaching/unassisted-evidence-checkpoint/unassisted-evidence-checkpoint|teaching.unassisted-evidence-checkpoint]]

@@ -171,3 +171,9 @@ also want the perf harness.
   (`.result.result.value`). Use the wrapper.
 - **`import.meta.env.DEV` is `true` under `vite dev`** in this repo. The note in
   `apps/desktop/scripts/profile-typing-lag.md` claiming otherwise is stale.
+
+## Related Skills
+
+- [[skills/coding/node-inspect-debugger/node-inspect-debugger|coding.node-inspect-debugger]]
+- [[skills/coding/systematic-debugging/systematic-debugging|coding.systematic-debugging]]
+- [[skills/coding/dogfood/dogfood|coding.dogfood]]

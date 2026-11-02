@@ -226,3 +226,9 @@ One more question: now that you've thought about it, what's your own understandi
 3. **Source recommendations require domain context.** Appropriate verification sources vary enormously by subject: for law it's primary legislation; for medicine it's peer-reviewed clinical literature; for history it's primary sources and peer-reviewed scholarship. The skill's value depends on the AI correctly identifying what counts as a good source in the learner's domain.
 
 4. **The skill does not replace domain expertise.** A learner who completes the three-step check on a technically complex explanation may identify a genuine-feeling objection that is actually based on a misconception. The claim check builds the habit and disposition; it is not a guarantee of accurate evaluation.
+
+## Related Skills
+
+- [[skills/teaching/explain-first-interrogator/explain-first-interrogator|teaching.explain-first-interrogator]]
+- [[skills/teaching/transfer-bridge/transfer-bridge|teaching.transfer-bridge]]
+- [[skills/teaching/srl-session-wrapper/srl-session-wrapper|teaching.srl-session-wrapper]]

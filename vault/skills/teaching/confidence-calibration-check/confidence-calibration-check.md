@@ -230,3 +230,11 @@ Here's your micro-goal for the next session: instead of re-reading the equilibri
 3. **Frequent calibration checks can produce strategic responding if learners game the rating.** A learner who understands the pattern may artificially lower pre-attempt confidence to appear "well-calibrated" after a good performance. This is unlikely with genuinely motivated learners but worth noting.
 
 4. **Calibration data across sessions requires session history to be useful.** A single calibration check gives a snapshot. The pattern — persistent overconfidence, improving calibration — only becomes visible over multiple sessions. This skill pairs with 20-10 (SRL Session Wrapper) and 20-12 (Weekly Agency Review) for longitudinal tracking.
+
+## Related Skills
+
+- [[skills/teaching/retrieve-first-gate/retrieve-first-gate|teaching.retrieve-first-gate]]
+- [[skills/teaching/explain-first-interrogator/explain-first-interrogator|teaching.explain-first-interrogator]]
+- [[skills/teaching/ai-claim-checker/ai-claim-checker|teaching.ai-claim-checker]]
+- [[skills/teaching/srl-session-wrapper/srl-session-wrapper|teaching.srl-session-wrapper]]
+- [[skills/teaching/unassisted-evidence-checkpoint/unassisted-evidence-checkpoint|teaching.unassisted-evidence-checkpoint]]

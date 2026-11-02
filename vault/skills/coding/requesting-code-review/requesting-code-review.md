@@ -295,3 +295,8 @@ tests exist, tests pass, no regressions.
 - **No test framework found** — skip regression check, reviewer verdict still runs
 - **Lint tools not installed** — skip that check silently, don't fail
 - **Auto-fix introduces new issues** — counts as a new failure, cycle continues
+
+## Related Skills
+
+- [[skills/coding/test-driven-development/test-driven-development|coding.test-driven-development]]
+- [[skills/coding/github/github|coding.github]]

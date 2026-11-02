@@ -276,3 +276,10 @@ For simultaneous equations, we're staying at Level 2 — your method is solid. F
 3. **Fading is not always linear.** Collins, Brown & Newman (1989) and subsequent research acknowledge that performance can regress after scaffold removal — especially when context changes (different problem types, time since practice, stress of assessment). The restoration protocol addresses this, but some learners experience cycling between levels as discouraging. The framing — "fading isn't always linear, this is normal" — is critical but may not be sufficient for very anxious learners.
 
 4. **The skill cannot fade scaffolding it is not responsible for.** If the learner uses other AI tools, tutors, or resources in addition to this skill, the Fading Manager only sees and fades the scaffolding within its own session structure. A learner with very high external support may show strong performance within sessions while remaining dependent on external help outside them. The unassisted evidence checkpoint (20-11) is the primary guard against this.
+
+## Related Skills
+
+- [[skills/teaching/progressive-hint-ladder/progressive-hint-ladder|teaching.progressive-hint-ladder]]
+- [[skills/teaching/srl-session-wrapper/srl-session-wrapper|teaching.srl-session-wrapper]]
+- [[skills/teaching/unassisted-evidence-checkpoint/unassisted-evidence-checkpoint|teaching.unassisted-evidence-checkpoint]]
+- [[skills/teaching/weekly-agency-review/weekly-agency-review|teaching.weekly-agency-review]]

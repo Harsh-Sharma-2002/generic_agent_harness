@@ -251,3 +251,10 @@ Your strategy goal from last week was to "do more practice problems" on genetics
 3. **Pattern interpretation requires caution about causal attribution.** "Your performance improved this week" and "your strategy change caused that improvement" are different claims. The skill is designed to invite the learner's own interpretation (which is metacognitively valuable) and to be appropriately tentative about causation ("that usually means" rather than "that proves").
 
 4. **Weekly cadence assumes consistent study sessions.** A learner with one session in a week has little data for a meaningful review. The skill can be adapted to "multi-session review" rather than strictly weekly — the trigger is accumulating enough evidence to show a pattern, not the passage of calendar time.
+
+## Related Skills
+
+- [[skills/teaching/confidence-calibration-check/confidence-calibration-check|teaching.confidence-calibration-check]]
+- [[skills/teaching/srl-session-wrapper/srl-session-wrapper|teaching.srl-session-wrapper]]
+- [[skills/teaching/unassisted-evidence-checkpoint/unassisted-evidence-checkpoint|teaching.unassisted-evidence-checkpoint]]
+- [[skills/teaching/fading-manager/fading-manager|teaching.fading-manager]]

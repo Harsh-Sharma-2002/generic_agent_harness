@@ -13,7 +13,7 @@ Use this domain when the Task's answer depends on information that exists outsid
 
 ## Skills
 
-### research.web-search
+### [[skills/research/web-search/web-search|research.web-search]]
 
 **Use when:** The Task requires external web information that must be retrieved and then synthesized into an answer.
 

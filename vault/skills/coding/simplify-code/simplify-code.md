@@ -280,3 +280,8 @@ covers the complementary case: parallel review *during* implementation, per
 task. This skill is the standalone *after-the-fact* cleanup pass. Use
 `requesting-code-review` for the pre-commit security/quality gate — that's
 the bug hunt; this is the cleanup.
+
+## Related Skills
+
+- [[skills/coding/requesting-code-review/requesting-code-review|coding.requesting-code-review]]
+- [[skills/coding/test-driven-development/test-driven-development|coding.test-driven-development]]
