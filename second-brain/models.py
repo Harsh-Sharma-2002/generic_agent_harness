@@ -3,16 +3,31 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
+
+
+class SecondBrainErrorCode(str, Enum):
+    """Classification for Second Brain runtime failures."""
+
+    REGISTRY_NOT_FOUND = "registry_not_found"
+    DOMAIN_NOT_FOUND = "domain_not_found"
+    SKILL_NOT_FOUND = "skill_not_found"
+    SKILL_PARSE_ERROR = "skill_parse_error"
+    SKILL_VALIDATION_ERROR = "skill_validation_error"
+    UNAUTHORIZED_SKILL = "unauthorized_skill"
+
+
+@dataclass(frozen=True, slots=True)
+class SecondBrainError:
+    """Structured error returned by the Second Brain runtime."""
+
+    code: SecondBrainErrorCode
+    message: str
 
 
 @dataclass(frozen=True, slots=True)
 class RelatedSkill:
-    """
-    A related skill exposed to the model for methodology navigation.
-
-    Relationships are advisory. They do not grant skill, domain,
-    or tool authority.
-    """
+    """Related methodology available for navigation."""
 
     skill_id: str
     description: str
@@ -20,12 +35,7 @@ class RelatedSkill:
 
 @dataclass(frozen=True, slots=True)
 class SkillMetadata:
-    """
-    Runtime-facing metadata parsed from a skill's YAML frontmatter.
-
-    Used internally for validation and projection. This object is not
-    intended to be injected directly into model context.
-    """
+    """Runtime-facing metadata parsed from skill YAML."""
 
     skill_id: str
     name: str
@@ -36,13 +46,7 @@ class SkillMetadata:
 
 @dataclass(frozen=True, slots=True)
 class SkillProjection:
-    """
-    Model-facing representation returned when a skill is loaded.
-
-    Contains only information useful to the model. Runtime bookkeeping,
-    authorization information, provenance, licensing, and Obsidian-only
-    content are intentionally excluded.
-    """
+    """Model-facing projection of a loaded skill."""
 
     name: str
     description: str
