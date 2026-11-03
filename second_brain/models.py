@@ -27,7 +27,12 @@ class SecondBrainError:
 
 @dataclass(frozen=True, slots=True)
 class RelatedSkill:
-    """Related methodology available for navigation."""
+    """
+    Related methodology available for navigation.
+
+    A relationship is advisory and does not grant domain,
+    skill, or tool authority.
+    """
 
     skill_id: str
     description: str
@@ -35,7 +40,13 @@ class RelatedSkill:
 
 @dataclass(frozen=True, slots=True)
 class SkillMetadata:
-    """Runtime-facing metadata parsed from skill YAML."""
+    """
+    Runtime-facing metadata parsed from skill YAML.
+
+    Used for validation, runtime bookkeeping, rollouts,
+    and observability. It is not injected directly into
+    model context.
+    """
 
     skill_id: str
     name: str
@@ -46,9 +57,29 @@ class SkillMetadata:
 
 @dataclass(frozen=True, slots=True)
 class SkillProjection:
-    """Model-facing projection of a loaded skill."""
+    """
+    Model-facing representation of a loaded skill.
+
+    Contains only information useful to the Worker.
+    Runtime bookkeeping, authorization information,
+    provenance, licensing, and Obsidian-only content
+    are intentionally excluded.
+    """
 
     name: str
     description: str
     content: str
     related: tuple[RelatedSkill, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class LoadedSkill:
+    """
+    Successful result of loading a skill.
+
+    Metadata is consumed by the runtime and observability.
+    Projection is exposed to the Worker.
+    """
+
+    metadata: SkillMetadata
+    projection: SkillProjection
