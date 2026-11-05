@@ -519,3 +519,81 @@ def test_skill_events_do_not_log_content() -> None:
     assert loaded_event["loaded_skills"] == 1
     assert loaded_event["skill_limit"] == 6
     assert loaded_event["domain"] == "coding"
+
+
+# --------------------------------------------------------------------
+# Methodology behavior invariants
+# --------------------------------------------------------------------
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+TASK_WORKER_PATH = REPO_ROOT / "tasks" / "task_worker.md"
+
+
+def test_task_worker_requires_directly_applicable_methodology() -> None:
+    text = TASK_WORKER_PATH.read_text(encoding="utf-8")
+
+    assert "Before substantive execution" in text
+    assert "directly matches the assigned Task" in text
+    assert "materially" in text
+    assert (
+        "Do not replace a directly applicable available "
+        "methodology" in text
+    )
+    assert (
+        "Do not load unrelated methodologies merely to satisfy "
+        "this rule." in text
+    )
+
+
+def test_domain_documents_advertise_canonical_methodology_ids() -> None:
+    coding = SecondBrainRuntime(VAULT_PATH).get_domain(
+        "coding"
+    )
+
+    assert isinstance(coding, str)
+    assert "coding.codebase-inspection" in coding
+    assert "coding.systematic-debugging" in coding
+
+
+def test_no_hardcoded_task_to_skill_mapping() -> None:
+    # Methodology choice stays semantic. Runtime logic must not
+    # contain Task -> skill mappings; documentation and schema
+    # descriptions may name example IDs.
+    for relative in (
+        "tasks/task_executor.py",
+        "tasks/models.py",
+        "worker/message.py",
+    ):
+        text = (REPO_ROOT / relative).read_text(
+            encoding="utf-8"
+        )
+
+        assert "codebase-inspection" not in text
+        assert "systematic-debugging" not in text
+
+    skill_runtime = (
+        REPO_ROOT / "worker" / "skill_runtime.py"
+    ).read_text(encoding="utf-8")
+
+    assert "codebase-inspection" not in skill_runtime
+
+
+@pytest.mark.asyncio
+async def test_skill_tools_do_not_load_skills_eagerly() -> None:
+    state = make_state()
+
+    execution = FakeToolClient({"shell"})
+
+    client = SkillToolClient(
+        tools=execution,
+        skill_runtime=make_runtime(
+            SecondBrainRuntime(VAULT_PATH),
+            state,
+        ),
+    )
+
+    await client.get_tools()
+
+    assert state.loaded_skills == []
+    assert execution.calls == []

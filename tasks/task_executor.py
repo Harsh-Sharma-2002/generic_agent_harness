@@ -20,24 +20,26 @@ a methodology document.
 
 from __future__ import annotations
 
-import json
+import asyncio
 from pathlib import Path
 from typing import Any, Callable
 
 from observability.tracer import RuntimeTracer
 from second_brain.models import SecondBrainError
 from second_brain.runtime import SecondBrainRuntime
-from tasks.models import (
-    EscalationKind,
-    EscalationRequest,
-    TaskState,
-)
+from tasks.models import TaskState
 from tasks.outcome import TaskOutcome
 from tasks.task import Task, TaskStatus
 from tool_grants.models import ToolAuthorityResolver
 from worker.clients.base import ToolClient
 from worker.clients.mcp import MCPToolClient
 from worker.factory import create_agent
+from worker.message import (
+    InvalidWorkerResult,
+    WORKER_TASK_RESULT_RESPONSE_FORMAT,
+    WorkerIterationExhausted,
+    WorkerTaskResult,
+)
 from worker.skill_runtime import (
     SkillToolClient,
     WorkerSkillRuntime,
@@ -109,6 +111,14 @@ class TaskExecutor:
 
         The caller owns TaskState. Passing the same object across
         attempts is what makes progress resumable.
+
+        This is also the attempt-failure boundary. Contract violations
+        (wrong Task status, Task/TaskState identity mismatch) still
+        raise, because they are programming errors. Every other
+        attempt failure — DOMAIN loading, tool discovery, trusted-tool
+        validation, Worker construction, provider interaction — becomes
+        a FAILED TaskOutcome, so one Task can never abort its siblings
+        or the Request. Cancellation always propagates.
         """
 
         if task.status is not TaskStatus.QUEUED:
@@ -121,6 +131,36 @@ class TaskExecutor:
             task,
             task_state,
         )
+
+        try:
+            return await self._run_attempt(
+                task,
+                task_state,
+            )
+
+        except asyncio.CancelledError:
+            raise
+
+        except WorkerIterationExhausted as exc:
+            return self._exhausted_outcome(
+                task=task,
+                task_state=task_state,
+                exhausted=exc,
+            )
+
+        except Exception as exc:
+            return self._failed_outcome(
+                task=task,
+                task_state=task_state,
+                error=exc,
+            )
+
+    async def _run_attempt(
+        self,
+        task: Task,
+        task_state: TaskState,
+    ) -> TaskOutcome:
+        """Run the attempt body; execute() converts its failures."""
 
         # Current authority, not the originally delegated authority.
         authorized_domains = sorted(
@@ -201,6 +241,9 @@ class TaskExecutor:
             local=self.local,
             trace=self.trace,
             worker_role="task",
+            final_response_format=(
+                WORKER_TASK_RESULT_RESPONSE_FORMAT
+            ),
         )
 
         task.status = TaskStatus.RUNNING
@@ -221,6 +264,34 @@ class TaskExecutor:
                 query=task.query,
                 request_id=task.request_id,
                 task_id=task.task_id,
+            )
+
+        except InvalidWorkerResult as exc:
+            # Structured finalization crossed its own boundary and
+            # failed. This is an explicit attempt failure: prose is
+            # never rescued into a lifecycle state.
+            task.status = TaskStatus.FAILED
+
+            self._emit(
+                event="worker_result_invalid",
+                task=task,
+                attempt=task_state.attempt,
+                error=str(exc),
+            )
+
+            self._emit(
+                event="task_failed",
+                task=task,
+                attempt=task_state.attempt,
+                error="InvalidWorkerResult",
+            )
+
+            return TaskOutcome(
+                request_id=task.request_id,
+                task_id=task.task_id,
+                status=TaskStatus.FAILED,
+                result=None,
+                error=f"Invalid Worker result: {exc}",
             )
 
         except (ValueError, RuntimeError) as exc:
@@ -252,17 +323,14 @@ class TaskExecutor:
                 result,
             )
 
-        except ValueError as exc:
+        except InvalidWorkerResult as exc:
             task.status = TaskStatus.FAILED
 
             outcome = TaskOutcome(
                 request_id=task.request_id,
                 task_id=task.task_id,
                 status=TaskStatus.FAILED,
-                error=(
-                    "Invalid structured Worker result: "
-                    f"{exc}"
-                ),
+                error=f"Invalid Worker result: {exc}",
             )
 
             self._emit(
@@ -583,311 +651,146 @@ class TaskExecutor:
         agent_result: Any,
     ) -> TaskOutcome:
         """
-        Convert a structured Worker result into canonical TaskOutcome.
+        Convert a canonical WorkerTaskResult into canonical TaskOutcome.
 
-        Raises ValueError for malformed output. Nothing is inferred
-        from prose, and no authority is ever derived from it.
+        The Worker has already crossed the structured boundary. This
+        boundary only maps lifecycle and accumulated work: it never
+        parses prose, rescues malformed output, or derives authority.
         """
 
-        payload = self._structured_payload(
-            agent_result
-        )
-
-        raw_status = payload.get("status")
-
-        if not isinstance(raw_status, str):
-            raise ValueError(
-                "Worker result requires a string 'status'."
+        if not isinstance(agent_result, WorkerTaskResult):
+            raise InvalidWorkerResult(
+                "Task Worker returned an unstructured result; "
+                "the configured Worker must return a canonical "
+                "WorkerTaskResult."
             )
 
-        status = raw_status.strip().lower()
-
-        result = payload.get("result")
-
-        if result is not None and not isinstance(
-            result,
-            dict,
-        ):
-            raise ValueError(
-                "Worker result 'result' must be an object or null."
-            )
-
-        progress = self._optional_string(
-            payload,
-            "progress",
-        )
-        remaining_work = self._optional_string(
-            payload,
-            "remaining_work",
-        )
-        findings = self._string_list(
-            payload,
-            "findings",
-        )
-        artifacts = self._string_list(
-            payload,
-            "artifacts",
-        )
-
-        if status == "completed":
-            if payload.get("escalation") is not None:
-                raise ValueError(
-                    "A completed Worker result must not carry an "
-                    "escalation."
-                )
-
+        if agent_result.status == "completed":
             return TaskOutcome(
                 request_id=task.request_id,
                 task_id=task.task_id,
                 status=TaskStatus.COMPLETED,
-                result=result,
-                progress=progress,
-                findings=tuple(findings),
-                artifacts=tuple(artifacts),
-                remaining_work=remaining_work,
+                result=agent_result.result,
+                progress=agent_result.progress,
+                findings=tuple(agent_result.findings),
+                artifacts=tuple(agent_result.artifacts),
+                remaining_work=agent_result.remaining_work,
                 escalation=None,
             )
 
-        if status == "blocked":
-            escalation = self._parse_escalation(
-                payload.get("escalation")
-            )
-
-            return TaskOutcome(
-                request_id=task.request_id,
-                task_id=task.task_id,
-                status=TaskStatus.BLOCKED,
-                result=result,
-                progress=progress,
-                findings=tuple(findings),
-                artifacts=tuple(artifacts),
-                remaining_work=remaining_work,
-                escalation=escalation,
-            )
-
-        raise ValueError(
-            f"Unknown Worker status {raw_status!r}."
+        return TaskOutcome(
+            request_id=task.request_id,
+            task_id=task.task_id,
+            status=TaskStatus.BLOCKED,
+            result=agent_result.result,
+            progress=agent_result.progress,
+            findings=tuple(agent_result.findings),
+            artifacts=tuple(agent_result.artifacts),
+            remaining_work=agent_result.remaining_work,
+            escalation=agent_result.escalation,
         )
 
-    @staticmethod
-    def _structured_payload(
-        agent_result: Any,
-    ) -> dict[str, Any]:
-        """
-        Extract the structured Worker payload.
+    def _failed_outcome(
+        self,
+        *,
+        task: Task,
+        task_state: TaskState,
+        error: Exception,
+    ) -> TaskOutcome:
+        """Convert an attempt-runtime failure into a FAILED outcome.
 
-        A structured agent may return the payload directly. The
-        GenericWorker returns ``{"content": "..."}``, so that content
-        must be exactly one JSON object.
-        """
-
-        if not isinstance(agent_result, dict):
-            raise ValueError(
-                "Worker result must be an object."
-            )
-
-        if "status" in agent_result:
-            return agent_result
-
-        content = agent_result.get("content")
-
-        if (
-            not isinstance(content, str)
-            or not content.strip()
-        ):
-            raise ValueError(
-                "Worker result contains no structured payload."
-            )
-
-        text = content.strip()
-
-        # Tolerate a single fenced JSON block; that is formatting, not
-        # semantics.
-        if text.startswith("```"):
-            lines = text.splitlines()
-
-            if (
-                len(lines) >= 2
-                and lines[-1].strip() == "```"
-            ):
-                lines = lines[1:-1]
-
-                if (
-                    lines
-                    and lines[0].strip().lower()
-                    in {"json", "jsonc"}
-                ):
-                    lines = lines[1:]
-
-                text = "\n".join(lines).strip()
-
-        try:
-            payload = json.loads(text)
-
-        except json.JSONDecodeError as exc:
-            raise ValueError(
-                "Worker result is not valid JSON: "
-                f"{exc.msg}."
-            ) from exc
-
-        if not isinstance(payload, dict):
-            raise ValueError(
-                "Worker result JSON must be an object."
-            )
-
-        return payload
-
-    @staticmethod
-    def _optional_string(
-        payload: dict[str, Any],
-        field: str,
-    ) -> str:
-        value = payload.get(field, "")
-
-        if value is None:
-            return ""
-
-        if not isinstance(value, str):
-            raise ValueError(
-                f"Worker result '{field}' must be a string."
-            )
-
-        return value
-
-    @staticmethod
-    def _string_list(
-        payload: dict[str, Any],
-        field: str,
-    ) -> list[str]:
-        value = payload.get(field, [])
-
-        if value is None:
-            return []
-
-        if not isinstance(value, list) or any(
-            not isinstance(item, str)
-            for item in value
-        ):
-            raise ValueError(
-                f"Worker result '{field}' must be a list of "
-                "strings."
-            )
-
-        return list(value)
-
-    @staticmethod
-    def _parse_escalation(
-        raw: Any,
-    ) -> EscalationRequest:
-        """
-        Build the canonical escalation from strict structure.
+        Prior accumulated work is preserved verbatim; nothing is
+        fabricated and no authority is changed.
         """
 
-        if not isinstance(raw, dict):
-            raise ValueError(
-                "A blocked Worker result requires an escalation "
-                "object."
-            )
+        task.status = TaskStatus.FAILED
 
-        raw_kind = raw.get("kind")
+        message = str(error)
 
-        if not isinstance(raw_kind, str):
-            raise ValueError(
-                "Escalation requires a string 'kind'."
-            )
+        if len(message) > 300:
+            message = message[:300] + "..."
 
-        try:
-            kind = EscalationKind(
-                raw_kind.strip().lower()
-            )
-
-        except ValueError as exc:
-            raise ValueError(
-                f"Unknown escalation kind {raw_kind!r}."
-            ) from exc
-
-        reason = raw.get("reason")
-
-        if (
-            not isinstance(reason, str)
-            or not reason.strip()
-        ):
-            raise ValueError(
-                "Escalation requires a non-empty 'reason'."
-            )
-
-        requested_domain = raw.get("requested_domain")
-        requested_tool = raw.get("requested_tool")
-        requested_skill_limit = raw.get(
-            "requested_skill_limit"
+        self._emit(
+            event="task_failed",
+            task=task,
+            attempt=task_state.attempt,
+            error=type(error).__name__,
         )
 
-        if kind is EscalationKind.DOMAIN_REQUIRED:
-            if (
-                not isinstance(requested_domain, str)
-                or not requested_domain.strip()
-            ):
-                raise ValueError(
-                    "DOMAIN_REQUIRED requires "
-                    "'requested_domain'."
-                )
+        return TaskOutcome(
+            request_id=task.request_id,
+            task_id=task.task_id,
+            status=TaskStatus.FAILED,
+            error=message,
+            progress=task_state.progress,
+            findings=tuple(task_state.findings),
+            artifacts=tuple(task_state.artifacts),
+            remaining_work=task_state.remaining_work,
+        )
 
-            if (
-                requested_tool is not None
-                or requested_skill_limit is not None
-            ):
-                raise ValueError(
-                    "DOMAIN_REQUIRED must not carry other "
-                    "request fields."
-                )
+    def _exhausted_outcome(
+        self,
+        *,
+        task: Task,
+        task_state: TaskState,
+        exhausted: WorkerIterationExhausted,
+    ) -> TaskOutcome:
+        """Record an execution-budget exhaustion as FAILED.
 
-            requested_domain = requested_domain.strip()
+        The packaging step may still have extracted partial work, and
+        that work is preserved, but the lifecycle is runtime-owned: an
+        exhausted attempt can never be COMPLETED and is not BLOCKED
+        because no canonical authority escalation was produced.
+        """
 
-        elif kind is EscalationKind.TOOL_REQUIRED:
-            if (
-                not isinstance(requested_tool, str)
-                or not requested_tool.strip()
-            ):
-                raise ValueError(
-                    "TOOL_REQUIRED requires 'requested_tool'."
-                )
+        task.status = TaskStatus.FAILED
 
-            if (
-                requested_domain is not None
-                or requested_skill_limit is not None
-            ):
-                raise ValueError(
-                    "TOOL_REQUIRED must not carry other "
-                    "request fields."
-                )
+        partial = exhausted.result
 
-            requested_tool = requested_tool.strip()
+        findings = list(task_state.findings)
+        artifacts = list(task_state.artifacts)
 
-        else:
-            if (
-                not isinstance(requested_skill_limit, int)
-                or isinstance(requested_skill_limit, bool)
-            ):
-                raise ValueError(
-                    "SKILL_LIMIT_EXCEEDED requires an integer "
-                    "'requested_skill_limit'."
-                )
+        if partial is not None:
+            findings.extend(
+                finding
+                for finding in partial.findings
+                if finding not in findings
+            )
+            artifacts.extend(
+                artifact
+                for artifact in partial.artifacts
+                if artifact not in artifacts
+            )
 
-            if (
-                requested_domain is not None
-                or requested_tool is not None
-            ):
-                raise ValueError(
-                    "SKILL_LIMIT_EXCEEDED must not carry other "
-                    "request fields."
-                )
+        self._emit(
+            event="task_failed",
+            task=task,
+            attempt=task_state.attempt,
+            error="IterationBudgetExhausted",
+        )
 
-        return EscalationRequest(
-            kind=kind,
-            reason=reason.strip(),
-            requested_domain=requested_domain,
-            requested_tool=requested_tool,
-            requested_skill_limit=requested_skill_limit,
+        return TaskOutcome(
+            request_id=task.request_id,
+            task_id=task.task_id,
+            status=TaskStatus.FAILED,
+            result=(
+                partial.result
+                if partial is not None
+                else None
+            ),
+            error=str(exhausted),
+            progress=(
+                partial.progress
+                if partial is not None and partial.progress.strip()
+                else task_state.progress
+            ),
+            findings=tuple(findings),
+            artifacts=tuple(artifacts),
+            remaining_work=(
+                partial.remaining_work
+                if partial is not None and partial.remaining_work.strip()
+                else task_state.remaining_work
+            ),
         )
 
     def _emit(

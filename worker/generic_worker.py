@@ -21,6 +21,31 @@ from worker.base import BaseWorker
 from worker.clients.base import ToolClient
 from worker.llm_caller import LLMCaller
 from worker.local_llm_caller import LocalLLMCaller
+from worker.message import (
+    InvalidWorkerResult,
+    WorkerIterationExhausted,
+    WorkerTaskResult,
+)
+
+
+FINALIZATION_INSTRUCTION = """\
+Execution for this Task is now finished. Do not call any tools.
+
+Convert the completed attempt above into the required structured Task
+result. Preserve the final answer in 'result'.
+
+Return status 'completed' with no escalation when the assigned Task was
+completed within the authority and tools you already had.
+
+Return status 'blocked' only when completing the Task genuinely
+requires authority you do not have. In that case preserve the work
+completed so far and include exactly one escalation object describing
+the required authority.
+
+Return one JSON object matching this schema:
+
+{schema}
+"""
 
 
 class GenericWorker(BaseWorker):
@@ -40,6 +65,9 @@ class GenericWorker(BaseWorker):
         verbose: bool = False,
         local: bool = False,
         worker_role: str = "worker",
+        final_response_format: (
+            dict[str, Any] | None
+        ) = None,
         trace: RuntimeTracer | None = None,
     ) -> None:
         self.tools = tools
@@ -48,6 +76,13 @@ class GenericWorker(BaseWorker):
         self.max_iterations = max_iterations
         self.verbose = verbose
         self.worker_role = worker_role
+
+        # Optional structured finalization contract. When set, the
+        # Worker's final free-form turn is packaged into the schema by
+        # one bounded, tool-free LLM call instead of being accepted as
+        # {"content": ...}. Supervisor and Learning Supervisor leave
+        # this unset and keep their existing behavior.
+        self.final_response_format = final_response_format
 
         # Existing detailed per-worker trace.
         self.trace: list[dict[str, Any]] = []
@@ -65,7 +100,7 @@ class GenericWorker(BaseWorker):
         self.iteration = 0
 
         self.is_done = False
-        self.result: dict[str, Any] | None = None
+        self.result: Any = None
 
         if local:
             self.llm = LocalLLMCaller()
@@ -147,6 +182,177 @@ class GenericWorker(BaseWorker):
 
         return message[:limit] + "..."
 
+    def _last_draft(self) -> str:
+        """
+        Return the most recent assistant draft, if one exists.
+        """
+
+        for message in reversed(self.messages):
+            if message.get("role") != "assistant":
+                continue
+
+            content = message.get("content")
+
+            if (
+                isinstance(content, str)
+                and content.strip()
+            ):
+                return content
+
+        return (
+            "Execution stopped before a final answer was produced: "
+            "the attempt reached its iteration budget."
+        )
+
+    def _finalization_instruction(
+        self,
+        *,
+        exhausted: bool = False,
+    ) -> str:
+        """
+        Render the finalization instruction.
+
+        The schema is included so a provider that cannot honor schema
+        response mode still receives the same contract.
+
+        An exhausted attempt receives an explicit notice that the Task
+        did not complete: the runtime still decides the lifecycle, and
+        the notice stops the finalizer from presenting partial work as
+        a finished result.
+        """
+
+        schema = "{}"
+
+        if self.final_response_format is not None:
+            json_schema = self.final_response_format.get(
+                "json_schema"
+            )
+
+            if isinstance(json_schema, dict):
+                schema = json.dumps(
+                    json_schema.get("schema", {}),
+                    indent=2,
+                )
+            else:
+                schema = json.dumps(
+                    self.final_response_format,
+                    indent=2,
+                )
+
+        instruction = FINALIZATION_INSTRUCTION.format(
+            schema=schema
+        )
+
+        if not exhausted:
+            return instruction
+
+        return (
+            "The Worker's execution budget is exhausted. This Task "
+            "was NOT completed.\n\n"
+            "Do not claim the Task succeeded. Report only the work "
+            "actually finished, the findings and artifacts that "
+            "actually exist, and what remains to be done. The runtime "
+            "records this attempt as failed regardless of the status "
+            "you return.\n\n"
+            + instruction
+        )
+
+    async def _finalize_result(
+        self,
+        draft: str,
+        *,
+        exhausted: bool = False,
+    ) -> WorkerTaskResult:
+        """
+        Package the completed attempt into the canonical result.
+
+        Exactly one tool-free LLM call is made with the configured
+        response format. Finalization never performs more execution
+        work and never exposes execution tools.
+        """
+
+        if self.final_response_format is None:
+            raise RuntimeError(
+                "Worker finalization requires a final response "
+                "format."
+            )
+
+        self._emit(
+            event="worker_finalization_started",
+            iteration=self.iteration,
+            exhausted=exhausted,
+        )
+
+        messages: list[ChatCompletionMessageParam] = [
+            *self.messages,
+            {
+                "role": "assistant",
+                "content": draft,
+            },
+            {
+                "role": "user",
+                "content": self._finalization_instruction(
+                    exhausted=exhausted
+                ),
+            },
+        ]
+
+        try:
+            response = await self.llm.call(
+                messages=messages,
+                tools=None,
+                response_format=(
+                    self.final_response_format
+                ),
+            )
+
+        except asyncio.CancelledError:
+            raise
+
+        except Exception as exc:
+            self._emit(
+                event="worker_finalization_failed",
+                iteration=self.iteration,
+                error=type(exc).__name__,
+            )
+
+            raise InvalidWorkerResult(
+                "Structured Worker finalization failed: "
+                f"{exc}"
+            ) from exc
+
+        try:
+            result = WorkerTaskResult.from_payload(
+                response.content
+            )
+
+        except InvalidWorkerResult:
+            self._emit(
+                event="worker_finalization_failed",
+                iteration=self.iteration,
+                error="InvalidWorkerResult",
+            )
+            raise
+
+        self._trace(
+            "FINALIZATION",
+            result.model_dump(mode="json"),
+        )
+
+        self._emit(
+            event="worker_finalization_completed",
+            iteration=self.iteration,
+            exhausted=exhausted,
+            status=result.status,
+            escalation=(
+                result.escalation.kind.value
+                if result.escalation is not None
+                else None
+            ),
+        )
+
+        return result
+
     async def start(
         self,
         query: str,
@@ -226,6 +432,45 @@ class GenericWorker(BaseWorker):
             return True
 
         if self.iteration >= self.max_iterations:
+            # The execution budget is exhausted: no further execution
+            # is possible. A Worker with a finalization contract still
+            # packages its partial work, but the runtime — not the
+            # finalizer — decides that the attempt failed.
+            if self.final_response_format is not None:
+
+                self._emit(
+                    event="worker_iteration_limit_reached",
+                    iteration=self.iteration,
+                    max_iterations=self.max_iterations,
+                )
+
+                try:
+                    partial = await self._finalize_result(
+                        self._last_draft(),
+                        exhausted=True,
+                    )
+
+                except InvalidWorkerResult as exc:
+                    self._emit(
+                        event="worker_iteration_exhausted",
+                        iteration=self.iteration,
+                        error="InvalidWorkerResult",
+                    )
+
+                    raise WorkerIterationExhausted(
+                        None,
+                        "Worker iteration budget exhausted and "
+                        f"partial packaging failed: {exc}",
+                    ) from exc
+
+                self._emit(
+                    event="worker_iteration_exhausted",
+                    iteration=self.iteration,
+                    packaged_status=partial.status,
+                )
+
+                raise WorkerIterationExhausted(partial)
+
             raise RuntimeError(
                 "Worker exceeded maximum iterations "
                 f"({self.max_iterations}) "
@@ -280,6 +525,29 @@ class GenericWorker(BaseWorker):
 
         if not response.tool_calls:
             if response.content and response.content.strip():
+
+                # Finalization boundary. A Task Worker configured with
+                # a final response contract packages the completed
+                # attempt into the canonical result through one
+                # bounded, tool-free LLM call.
+                if self.final_response_format is not None:
+                    self.result = await self._finalize_result(
+                        response.content
+                    )
+
+                    self.is_done = True
+
+                    self._emit(
+                        event="worker_step_completed",
+                        iteration=self.iteration,
+                    )
+
+                    self._emit(
+                        event="worker_completed",
+                    )
+
+                    return True
+
                 self.result = {
                     "content": response.content,
                 }
@@ -336,6 +604,66 @@ class GenericWorker(BaseWorker):
             tool_name = tool_call.function.name
 
             started_at = time.perf_counter()
+
+            # Dispatch authorization.
+            #
+            # Schema filtering is a presentation choice, not a
+            # security boundary: the model can emit any tool name, so
+            # every model-originated call is checked against this
+            # Worker's configured authority immediately before it
+            # reaches the ToolClient. Arguments are not traced for a
+            # rejected call.
+            if (
+                self.allowed_tools is not None
+                and tool_name not in self.allowed_tools
+            ):
+                unauthorized_message = (
+                    f"Tool {tool_name!r} is not authorized for "
+                    "this Worker."
+                )
+
+                self._emit(
+                    event="tool_call_started",
+                    iteration=self.iteration,
+                    tool_call_id=tool_call_id,
+                    tool_name=tool_name,
+                )
+
+                self._emit(
+                    event="tool_call_failed",
+                    iteration=self.iteration,
+                    tool_call_id=tool_call_id,
+                    tool_name=tool_name,
+                    duration_seconds=round(
+                        time.perf_counter()
+                        - started_at,
+                        6,
+                    ),
+                    error="unauthorized_tool",
+                    error_message=unauthorized_message,
+                )
+
+                tool_result = json.dumps(
+                    {
+                        "ok": False,
+                        "error": unauthorized_message,
+                    }
+                )
+
+                self._trace(
+                    "TOOL RESULT",
+                    tool_result,
+                )
+
+                self.messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "content": tool_result,
+                    }
+                )
+
+                continue
 
             secret_values: list[str] = []
 
@@ -483,7 +811,7 @@ class GenericWorker(BaseWorker):
         query: str,
         request_id: str,
         task_id: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> Any:
         """
         Execute continuously until the worker produces a final result.
         """

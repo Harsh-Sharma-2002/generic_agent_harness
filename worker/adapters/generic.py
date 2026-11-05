@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from observability.tracer import RuntimeTracer
 from worker.base import BaseWorker
 from worker.clients.base import ToolClient
@@ -17,6 +19,9 @@ def create_generic_worker(
     verbose: bool = False,
     local: bool = False,
     worker_role: str = "worker",
+    final_response_format: (
+        dict[str, Any] | None
+    ) = None,
     trace: RuntimeTracer | None = None,
 ) -> BaseWorker:
     """
@@ -34,6 +39,7 @@ def create_generic_worker(
         verbose=verbose,
         local=local,
         worker_role=worker_role,
+        final_response_format=final_response_format,
         trace=trace,
     )
 

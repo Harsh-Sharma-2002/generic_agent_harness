@@ -20,6 +20,10 @@ from tasks.request import Request
 from tasks.task import Task, TaskStatus
 from tasks.task_executor import TaskExecutor
 from tool_grants.registry import TrustedDomainGrants
+from worker.message import (
+    WORKER_TASK_RESULT_RESPONSE_FORMAT,
+    WorkerTaskResult,
+)
 
 
 VAULT_PATH = Path(__file__).resolve().parents[1] / "vault"
@@ -79,14 +83,14 @@ class FakeAgent:
 
     def __init__(
         self,
-        result: dict[str, Any] | None = None,
+        result: WorkerTaskResult | None = None,
         error: Exception | None = None,
     ) -> None:
         self.result = (
-            {
-                "status": "completed",
-                "result": {"content": "done"},
-            }
+            WorkerTaskResult(
+                status="completed",
+                result={"content": "done"},
+            )
             if result is None
             else result
         )
@@ -100,7 +104,7 @@ class FakeAgent:
         query: str,
         request_id: str,
         task_id: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> WorkerTaskResult:
         self.runs += 1
         self.queries.append(query)
 
@@ -214,10 +218,10 @@ async def test_attempt_accepts_task_and_task_state(
     factory = AgentFactory(
         [
             FakeAgent(
-                {
-                    "status": "completed",
-                    "result": {"content": "fixed"},
-                }
+                WorkerTaskResult(
+                    status="completed",
+                    result={"content": "fixed"},
+                )
             )
         ]
     )
@@ -483,14 +487,17 @@ async def test_missing_authorized_domain_fails_clearly(
 
     task = make_task()
 
-    with pytest.raises(
-        RuntimeError,
-        match="could not be loaded",
-    ):
-        await executor.execute(task, make_state())
+    outcome = await executor.execute(
+        task,
+        make_state(),
+    )
 
+    assert outcome.status is TaskStatus.FAILED
+    assert "could not be loaded" in (
+        outcome.error or ""
+    )
     assert factory.calls == []
-    assert task.status is TaskStatus.QUEUED
+    assert task.status is TaskStatus.FAILED
 
 
 @pytest.mark.asyncio
@@ -500,15 +507,18 @@ async def test_empty_authorized_domains_fail_clearly(
     factory = AgentFactory([FakeAgent()])
     executor = make_executor(monkeypatch, factory)
 
-    with pytest.raises(
-        ValueError,
-        match="no authorized domains",
-    ):
-        await executor.execute(
-            make_task(domains=()),
-            make_state(domains=()),
-        )
+    task = make_task(domains=())
 
+    outcome = await executor.execute(
+        task,
+        make_state(domains=()),
+    )
+
+    assert outcome.status is TaskStatus.FAILED
+    assert "no authorized domains" in (
+        outcome.error or ""
+    )
+    assert task.status is TaskStatus.FAILED
     assert factory.calls == []
 
 
@@ -551,17 +561,17 @@ async def test_unavailable_trusted_tool_fails_clearly(
 
     task = make_task(domains=("research",))
 
-    with pytest.raises(
-        RuntimeError,
-        match="unavailable runtime tool",
-    ):
-        await executor.execute(
-            task,
-            make_state(domains=("research",)),
-        )
+    outcome = await executor.execute(
+        task,
+        make_state(domains=("research",)),
+    )
 
+    assert outcome.status is TaskStatus.FAILED
+    assert "unavailable runtime tool" in (
+        outcome.error or ""
+    )
     assert factory.calls == []
-    assert task.status is TaskStatus.QUEUED
+    assert task.status is TaskStatus.FAILED
 
 
 # --------------------------------------------------------------------
@@ -800,11 +810,15 @@ async def test_validation_failure_does_not_consume_suggestion(
         restart_suggestion=provider,
     )
 
-    with pytest.raises(ValueError, match="no authorized domains"):
-        await executor.execute(
-            make_task(domains=()),
-            make_state(domains=(), attempt=2),
-        )
+    outcome = await executor.execute(
+        make_task(domains=()),
+        make_state(domains=(), attempt=2),
+    )
+
+    assert outcome.status is TaskStatus.FAILED
+    assert "no authorized domains" in (
+        outcome.error or ""
+    )
 
     # Guidance is only consumed when an attempt is actually built.
     assert consumed == []
@@ -885,7 +899,7 @@ def test_task_executor_has_no_legacy_skill_architecture() -> None:
 
 
 # --------------------------------------------------------------------
-# Structured Worker outcomes
+# Canonical structured Worker outcomes
 # --------------------------------------------------------------------
 
 
@@ -895,7 +909,7 @@ class SkillUsingAgent(FakeAgent):
     def __init__(
         self,
         skill_id: str,
-        result: dict[str, Any] | None = None,
+        result: WorkerTaskResult | None = None,
     ) -> None:
         super().__init__(result)
         self.skill_id = skill_id
@@ -906,7 +920,7 @@ class SkillUsingAgent(FakeAgent):
         query: str,
         request_id: str,
         task_id: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> WorkerTaskResult:
         self.runs += 1
         self.queries.append(query)
 
@@ -923,7 +937,9 @@ class SkillUsingAgent(FakeAgent):
         return self.result
 
 
-def completed_payload(**overrides: Any) -> dict[str, Any]:
+def completed_result(
+    **overrides: Any,
+) -> WorkerTaskResult:
     payload: dict[str, Any] = {
         "status": "completed",
         "result": {"content": "done"},
@@ -936,26 +952,26 @@ def completed_payload(**overrides: Any) -> dict[str, Any]:
 
     payload.update(overrides)
 
-    return payload
+    return WorkerTaskResult.model_validate(payload)
 
 
-def blocked_payload(
+def blocked_result(
     escalation: dict[str, Any],
     **overrides: Any,
-) -> dict[str, Any]:
-    payload = completed_payload(
-        status="blocked",
-        result=None,
-        progress="Partial work.",
-        findings=["Found one defect."],
-        artifacts=["trace.txt"],
-        remaining_work="Finish the fix.",
-        escalation=escalation,
-    )
+) -> WorkerTaskResult:
+    payload: dict[str, Any] = {
+        "status": "blocked",
+        "result": None,
+        "progress": "Partial work.",
+        "findings": ["Found one defect."],
+        "artifacts": ["trace.txt"],
+        "remaining_work": "Finish the fix.",
+        "escalation": escalation,
+    }
 
     payload.update(overrides)
 
-    return payload
+    return WorkerTaskResult.model_validate(payload)
 
 
 DOMAIN_ESCALATION: dict[str, Any] = {
@@ -966,13 +982,29 @@ DOMAIN_ESCALATION: dict[str, Any] = {
 
 
 @pytest.mark.asyncio
+async def test_executor_configures_canonical_finalization_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    factory = AgentFactory([FakeAgent()])
+
+    executor = make_executor(monkeypatch, factory)
+
+    await executor.execute(make_task(), make_state())
+
+    assert (
+        factory.calls[0]["final_response_format"]
+        == WORKER_TASK_RESULT_RESPONSE_FORMAT
+    )
+
+
+@pytest.mark.asyncio
 async def test_completed_worker_result_becomes_completed_outcome(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     factory = AgentFactory(
         [
             FakeAgent(
-                completed_payload(
+                completed_result(
                     progress="All done.",
                     findings=["No defect remains."],
                     artifacts=["fix.diff"],
@@ -1042,7 +1074,7 @@ async def test_blocked_worker_result_becomes_canonical_escalation(
     value: Any,
 ) -> None:
     factory = AgentFactory(
-        [FakeAgent(blocked_payload(escalation))]
+        [FakeAgent(blocked_result(escalation))]
     )
 
     executor = make_executor(monkeypatch, factory)
@@ -1064,7 +1096,7 @@ async def test_blocked_worker_result_preserves_work(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     factory = AgentFactory(
-        [FakeAgent(blocked_payload(DOMAIN_ESCALATION))]
+        [FakeAgent(blocked_result(DOMAIN_ESCALATION))]
     )
 
     executor = make_executor(monkeypatch, factory)
@@ -1081,17 +1113,13 @@ async def test_blocked_worker_result_preserves_work(
 
 
 @pytest.mark.asyncio
-async def test_completed_result_with_escalation_is_rejected(
+async def test_unstructured_worker_result_fails_clearly(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # A Worker that did not cross the structured boundary is a
+    # configuration failure, never prose to be interpreted.
     factory = AgentFactory(
-        [
-            FakeAgent(
-                completed_payload(
-                    escalation=DOMAIN_ESCALATION
-                )
-            )
-        ]
+        [FakeAgent({"content": "plain prose"})]
     )
 
     executor = make_executor(monkeypatch, factory)
@@ -1101,141 +1129,10 @@ async def test_completed_result_with_escalation_is_rejected(
     outcome = await executor.execute(task, make_state())
 
     assert outcome.status is TaskStatus.FAILED
-    assert "must not carry an escalation" in (
-        outcome.error or ""
-    )
-    assert task.status is TaskStatus.FAILED
-
-
-@pytest.mark.asyncio
-async def test_blocked_result_without_escalation_is_rejected(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    factory = AgentFactory(
-        [
-            FakeAgent(
-                completed_payload(
-                    status="blocked",
-                    escalation=None,
-                )
-            )
-        ]
-    )
-
-    executor = make_executor(monkeypatch, factory)
-
-    outcome = await executor.execute(
-        make_task(),
-        make_state(),
-    )
-
-    assert outcome.status is TaskStatus.FAILED
-    assert "requires an escalation" in (outcome.error or "")
-
-
-@pytest.mark.asyncio
-async def test_unknown_escalation_kind_is_rejected(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    factory = AgentFactory(
-        [
-            FakeAgent(
-                blocked_payload(
-                    {
-                        "kind": "browser_required",
-                        "reason": "Needs a browser.",
-                    }
-                )
-            )
-        ]
-    )
-
-    executor = make_executor(monkeypatch, factory)
-
-    outcome = await executor.execute(
-        make_task(),
-        make_state(),
-    )
-
-    assert outcome.status is TaskStatus.FAILED
-    assert "Unknown escalation kind" in (outcome.error or "")
-
-
-@pytest.mark.asyncio
-async def test_malformed_structured_output_fails_clearly(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    factory = AgentFactory(
-        [FakeAgent({"content": "not json"})]
-    )
-
-    executor = make_executor(monkeypatch, factory)
-
-    task = make_task()
-
-    outcome = await executor.execute(task, make_state())
-
-    assert outcome.status is TaskStatus.FAILED
-    assert (outcome.error or "").startswith(
-        "Invalid structured Worker result:"
-    )
-    assert task.status is TaskStatus.FAILED
-
-
-@pytest.mark.asyncio
-async def test_prose_is_never_treated_as_blocked(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    factory = AgentFactory(
-        [
-            FakeAgent(
-                {
-                    "content": (
-                        "I am blocked because I need "
-                        "web_search."
-                    )
-                }
-            )
-        ]
-    )
-
-    executor = make_executor(monkeypatch, factory)
-
-    outcome = await executor.execute(
-        make_task(),
-        make_state(),
-    )
-
-    assert outcome.status is TaskStatus.FAILED
+    assert "Invalid Worker result" in (outcome.error or "")
+    assert "unstructured" in (outcome.error or "")
     assert outcome.escalation is None
-
-
-@pytest.mark.asyncio
-async def test_fenced_json_result_is_accepted(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    payload = completed_payload()
-
-    factory = AgentFactory(
-        [
-            FakeAgent(
-                {
-                    "content": "```json\n"
-                    + json.dumps(payload)
-                    + "\n```",
-                }
-            )
-        ]
-    )
-
-    executor = make_executor(monkeypatch, factory)
-
-    outcome = await executor.execute(
-        make_task(),
-        make_state(),
-    )
-
-    assert outcome.status is TaskStatus.COMPLETED
+    assert task.status is TaskStatus.FAILED
 
 
 @pytest.mark.asyncio
@@ -1244,9 +1141,7 @@ async def test_invalid_worker_result_is_traced(
 ) -> None:
     trace = RecordingTrace()
 
-    factory = AgentFactory(
-        [FakeAgent({"content": "{}"})]
-    )
+    factory = AgentFactory([FakeAgent({"content": "{}"})])
 
     executor = make_executor(
         monkeypatch,
@@ -1264,6 +1159,14 @@ async def test_invalid_worker_result_is_traced(
 
     assert len(invalid) == 1
     assert invalid[0]["attempt"] == 1
+
+    failed = [
+        event
+        for event in trace.events
+        if event["event"] == "task_failed"
+    ]
+
+    assert failed[0]["error"] == "InvalidWorkerResult"
 
 
 # --------------------------------------------------------------------
@@ -1344,7 +1247,7 @@ async def test_unauthorized_skill_blocks_with_domain_required(
 ) -> None:
     agent = SkillUsingAgent(
         "research.web-search",
-        blocked_payload(DOMAIN_ESCALATION),
+        blocked_result(DOMAIN_ESCALATION),
     )
 
     factory = AgentFactory([agent])
@@ -1402,11 +1305,12 @@ async def test_blocked_outcome_is_accepted_by_supervisor(
     )
 
     task_id = json.loads(delegated)["task_id"]
+
     task = supervisor.tasks[task_id]
 
     agent = SkillUsingAgent(
         "research.web-search",
-        blocked_payload(DOMAIN_ESCALATION),
+        blocked_result(DOMAIN_ESCALATION),
     )
 
     monkeypatch.setattr(

@@ -378,21 +378,107 @@ class Supervisor:
     ) -> list[TaskOutcome]:
         """
         Execute one runnable batch concurrently and record outcomes.
+
+        Every batch member produces a canonical outcome. Exception
+        results are converted at this boundary so one Task cannot
+        abort its siblings or the Request; TaskExecutor already
+        converts expected attempt failures, and this is the safety net
+        for anything that escapes it.
+
+        Cancellation is not an outcome: it propagates, and the gather
+        itself has already cancelled the remaining children.
         """
 
-        outcomes = await asyncio.gather(
+        results = await asyncio.gather(
             *[
                 self._execute_task(task)
                 for task in tasks
-            ]
+            ],
+            return_exceptions=True,
         )
+
+        outcomes: list[TaskOutcome] = []
+
+        for task, result in zip(tasks, results):
+            if isinstance(result, asyncio.CancelledError):
+                raise result
+
+            if isinstance(result, BaseException):
+                outcomes.append(
+                    self._batch_failure_outcome(
+                        task,
+                        result,
+                    )
+                )
+                continue
+
+            outcomes.append(result)
 
         for outcome in outcomes:
             self.outcomes[
                 outcome.task_id
             ] = outcome
 
-        return list(outcomes)
+        return outcomes
+
+    def _batch_failure_outcome(
+        self,
+        task: Task,
+        exc: BaseException,
+    ) -> TaskOutcome:
+        """
+        Convert an unexpected batch exception into a canonical
+        FAILED outcome, preserving whatever TaskState already held.
+        """
+
+        task.status = TaskStatus.FAILED
+
+        state = self.task_states.get(
+            task.task_id
+        )
+
+        message = str(exc)
+
+        if len(message) > 300:
+            message = message[:300] + "..."
+
+        outcome = TaskOutcome(
+            request_id=task.request_id,
+            task_id=task.task_id,
+            status=TaskStatus.FAILED,
+            error=(
+                f"Task execution crashed: "
+                f"{type(exc).__name__}: {message}"
+            ),
+            progress=(
+                state.progress
+                if state is not None
+                else ""
+            ),
+            findings=(
+                tuple(state.findings)
+                if state is not None
+                else ()
+            ),
+            artifacts=(
+                tuple(state.artifacts)
+                if state is not None
+                else ()
+            ),
+            remaining_work=(
+                state.remaining_work
+                if state is not None
+                else ""
+            ),
+        )
+
+        self._emit(
+            event="task_failed",
+            task_id=task.task_id,
+            error=type(exc).__name__,
+        )
+
+        return outcome
 
     def _process_blocked_outcomes(
         self,
@@ -620,6 +706,37 @@ class Supervisor:
                 "result": outcome.result,
                 "error": outcome.error,
             }
+
+            if (
+                outcome.status is TaskStatus.FAILED
+                and state is not None
+                and (
+                    outcome.progress
+                    or outcome.findings
+                    or outcome.artifacts
+                    or outcome.remaining_work
+                )
+            ):
+                # A failed attempt may still have produced usable
+                # partial work (for example, budget exhaustion).
+                entry.update(
+                    {
+                        "progress": (
+                            outcome.progress
+                            or state.progress
+                        ),
+                        "findings": list(
+                            outcome.findings
+                        ) or list(state.findings),
+                        "artifacts": list(
+                            outcome.artifacts
+                        ) or list(state.artifacts),
+                        "remaining_work": (
+                            outcome.remaining_work
+                            or state.remaining_work
+                        ),
+                    }
+                )
 
             if (
                 outcome.status is TaskStatus.BLOCKED

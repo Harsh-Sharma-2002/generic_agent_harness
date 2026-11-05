@@ -49,6 +49,9 @@ SKILL_LIMIT_INCREMENT = 2
 #: Hard ceiling for a Task's skill limit.
 MAX_SKILL_LIMIT = 11
 
+#: Bound for accumulated progress text across attempts.
+PROGRESS_MAX_CHARS = 4000
+
 
 class EscalationValidationError(ValueError):
     """
@@ -103,16 +106,107 @@ def apply_outcome(
     """
     Persist a Worker's accumulated work onto its TaskState.
 
-    Worker-owned fields are copied. Control state — attempt,
+    Persistence is runtime-owned and conservative: accumulated work
+    survives a replacement Worker, so TaskState never depends on the
+    next model echoing prior state back. Control state — attempt,
     authorized domains, skill limit, loaded skills — is never taken
     from Worker output.
     """
 
-    state.progress = outcome.progress
-    state.findings = list(outcome.findings)
-    state.artifacts = list(outcome.artifacts)
-    state.remaining_work = outcome.remaining_work
+    state.progress = _merge_progress(
+        state.progress,
+        outcome.progress,
+    )
+    state.findings = _merge_unique(
+        state.findings,
+        outcome.findings,
+    )
+    state.artifacts = _merge_unique(
+        state.artifacts,
+        outcome.artifacts,
+    )
+    state.remaining_work = _merge_remaining_work(
+        existing=state.remaining_work,
+        incoming=outcome.remaining_work,
+        completed=(outcome.status is TaskStatus.COMPLETED),
+    )
     state.escalation = outcome.escalation
+
+
+def _merge_unique(
+    existing: list[str],
+    incoming: tuple[str, ...],
+) -> list[str]:
+    """
+    Append new unique entries, preserving existing order.
+
+    An empty incoming collection never erases accumulated work.
+    """
+
+    merged = list(existing)
+    seen = set(existing)
+
+    for item in incoming:
+        if item in seen:
+            continue
+
+        merged.append(item)
+        seen.add(item)
+
+    return merged
+
+
+def _merge_progress(
+    existing: str,
+    incoming: str,
+) -> str:
+    """
+    Merge attempt progress deterministically.
+
+    Empty values never erase meaningful existing progress. Two
+    different non-empty values are both preserved, bounded by
+    PROGRESS_MAX_CHARS; no summarization model is involved.
+    """
+
+    if not incoming.strip():
+        return existing
+
+    if not existing.strip():
+        return incoming
+
+    if existing.strip() == incoming.strip():
+        return existing
+
+    combined = f"{existing.rstrip()}\n\n{incoming.strip()}"
+
+    if len(combined) <= PROGRESS_MAX_CHARS:
+        return combined
+
+    return combined[-PROGRESS_MAX_CHARS:]
+
+
+def _merge_remaining_work(
+    *,
+    existing: str,
+    incoming: str,
+    completed: bool,
+) -> str:
+    """
+    Merge remaining work.
+
+    Remaining work describes the current frontier rather than
+    history, so a newer non-empty value replaces the old one. A
+    COMPLETED outcome may legitimately clear it; a BLOCKED outcome
+    with empty remaining work must not erase meaningful existing work.
+    """
+
+    if completed:
+        return incoming
+
+    if incoming.strip():
+        return incoming
+
+    return existing
 
 
 def validate_escalation(
