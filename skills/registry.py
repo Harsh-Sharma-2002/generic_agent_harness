@@ -53,6 +53,42 @@ SKILLS: dict[str, Skill] = {
             "web_search",
         },
     ),
+
+    "document_analysis": Skill(
+        name="document_analysis",
+        description=(
+            "Analyze supplied case documents and extract "
+            "evidence while preserving source provenance."
+        ),
+        path=SKILLS_DIR / "document_analysis.md",
+        allowed_tools={
+            "shell",
+        },
+    ),
+
+    "evidence_validation": Skill(
+        name="evidence_validation",
+        description=(
+            "Validate case evidence for contradictions, gaps, "
+            "duplicates, and unsupported claims."
+        ),
+        path=SKILLS_DIR / "evidence_validation.md",
+        allowed_tools={
+            "shell",
+        },
+    ),
+
+    "case_synthesis": Skill(
+        name="case_synthesis",
+        description=(
+            "Synthesize established case evidence into "
+            "attorney-facing summaries and demand outlines."
+        ),
+        path=SKILLS_DIR / "case_synthesis.md",
+        allowed_tools={
+            "shell",
+        },
+    ),
 }
 
 
