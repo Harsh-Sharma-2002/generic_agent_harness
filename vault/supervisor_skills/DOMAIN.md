@@ -1,26 +1,32 @@
 # Supervisor Methodology Index
 
-Supervisor methodologies describe how a Request may be decomposed and
-orchestrated. They provide planning guidance only: they never grant Task
-domains, execution tools, Worker skills, or any other authority.
+Supervisor methodologies describe how work in a semantic domain should be
+decomposed into Tasks. They provide planning guidance only: they never
+grant Task domains, execution tools, Worker skills, or any other
+authority.
 
-## Methodologies
+## Decomposition Domains
 
-### [[supervisor_skills/parallel-decomposition/parallel-decomposition|supervisor.parallel-decomposition]]
+### [[supervisor_skills/coding/coding|supervisor.coding]]
 
-Methodology for decomposing independent work.
+Decomposition methodology for software-engineering work.
 
-### [[supervisor_skills/dependency-decomposition/dependency-decomposition|supervisor.dependency-decomposition]]
+### [[supervisor_skills/research/research|supervisor.research]]
 
-Methodology for work with execution dependencies.
+Decomposition methodology for research and information-gathering work.
 
-### [[supervisor_skills/comparative-decomposition/comparative-decomposition|supervisor.comparative-decomposition]]
+### [[supervisor_skills/teaching/teaching|supervisor.teaching]]
 
-Methodology for comparative work.
+Decomposition methodology for learning and teaching interactions.
+
+### [[supervisor_skills/data/data|supervisor.data]]
+
+Decomposition methodology for structured-data analysis.
 
 ## Routing Principle
 
 Load a methodology only when it clearly applies to the Request.
 
-Decomposition decisions remain the Supervisor's; a methodology changes
-how the Request is planned, never what a Task is authorized to do.
+A Supervisor domain methodology is not Worker domain authorization: loading
+one changes how the Request is planned, never what a Task is authorized to
+do.

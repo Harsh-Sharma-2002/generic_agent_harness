@@ -1,16 +1,16 @@
 ---
 # AGENT SKILLS STANDARD FIELDS (v2)
-name: dependency-decomposition
-description: "Methodology for work with execution dependencies."
+name: teaching
+description: "Decomposition methodology for learning and teaching interactions."
 
 # KERNELAI CANONICAL FIELDS
-id: supervisor.dependency-decomposition
+id: supervisor.teaching
 related: []
 
 # UPSTREAM / ADDITIONAL FIELDS
 domain: supervisor
 ---
 
-# Dependency Decomposition
+# Teaching Decomposition
 
 PLACEHOLDER — methodology content will be designed separately.

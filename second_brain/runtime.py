@@ -242,7 +242,7 @@ class SecondBrainRuntime:
 
         Example:
 
-            supervisor.parallel-decomposition
+            supervisor.research
 
         There is deliberately no ``authorized_domains`` parameter and
         no TaskState here: the Supervisor role is the authorization

@@ -1,16 +1,16 @@
 ---
 # AGENT SKILLS STANDARD FIELDS (v2)
-name: comparative-decomposition
-description: "Methodology for comparative work."
+name: data
+description: "Decomposition methodology for structured-data analysis."
 
 # KERNELAI CANONICAL FIELDS
-id: supervisor.comparative-decomposition
+id: supervisor.data
 related: []
 
 # UPSTREAM / ADDITIONAL FIELDS
 domain: supervisor
 ---
 
-# Comparative Decomposition
+# Data Decomposition
 
 PLACEHOLDER — methodology content will be designed separately.

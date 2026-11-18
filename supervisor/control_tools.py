@@ -126,7 +126,7 @@ GET_SUPERVISOR_SKILL_SCHEMA: dict[str, Any] = {
             "Load one Supervisor decomposition methodology from the "
             "Supervisor methodology index. Pass the canonical "
             "Supervisor ID shown there, for example "
-            "'supervisor.parallel-decomposition'. A methodology is "
+            "'supervisor.research'. A methodology is "
             "planning guidance for this Request; it does not grant "
             "Task domains, execution tools, Worker skills, or any "
             "other authority. Loading a methodology that is already "

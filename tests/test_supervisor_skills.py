@@ -30,9 +30,10 @@ from worker.skill_runtime import SkillToolClient, WorkerSkillRuntime
 VAULT_PATH = Path(__file__).resolve().parents[1] / "vault"
 
 SUPERVISOR_SKILL_IDS = (
-    "supervisor.parallel-decomposition",
-    "supervisor.dependency-decomposition",
-    "supervisor.comparative-decomposition",
+    "supervisor.coding",
+    "supervisor.research",
+    "supervisor.teaching",
+    "supervisor.data",
 )
 
 PLACEHOLDER = (
@@ -40,9 +41,10 @@ PLACEHOLDER = (
 )
 
 METHODOLOGY_HEADINGS = (
-    "# Parallel Decomposition",
-    "# Dependency Decomposition",
-    "# Comparative Decomposition",
+    "# Coding Decomposition",
+    "# Research Decomposition",
+    "# Teaching Decomposition",
+    "# Data Decomposition",
 )
 
 
@@ -117,6 +119,25 @@ def test_supervisor_index_and_methodologies_are_discoverable(
         assert PLACEHOLDER in loaded.projection.content
 
 
+def test_supervisor_vault_contains_only_domain_methodologies() -> None:
+    root = VAULT_PATH / "supervisor_skills"
+
+    directories = {
+        path.name for path in root.iterdir() if path.is_dir()
+    }
+
+    assert directories == {
+        "coding",
+        "research",
+        "teaching",
+        "data",
+    }
+
+    assert {
+        path.name for path in root.glob("*.md")
+    } == {"DOMAIN.md"}
+
+
 # B. Startup projection
 
 
@@ -154,22 +175,20 @@ async def test_get_supervisor_skill_loads_and_records(
 
     raw = await supervisor.control_client.call_tool(
         "get_supervisor_skill",
-        {"skill_id": " supervisor.parallel-decomposition "},
+        {"skill_id": " supervisor.research "},
     )
 
     result = json.loads(raw)
 
     assert result["ok"] is True
     assert result["reused"] is False
-    assert result["skill"]["skill_id"] == (
-        "supervisor.parallel-decomposition"
-    )
-    assert result["skill"]["name"] == "parallel-decomposition"
-    assert "# Parallel Decomposition" in result["skill"]["content"]
+    assert result["skill"]["skill_id"] == "supervisor.research"
+    assert result["skill"]["name"] == "research"
+    assert "# Research Decomposition" in result["skill"]["content"]
     assert PLACEHOLDER in result["skill"]["content"]
 
     assert supervisor.loaded_supervisor_skills == [
-        "supervisor.parallel-decomposition"
+        "supervisor.research"
     ]
 
 
@@ -185,14 +204,14 @@ async def test_loading_the_same_methodology_reuses_it(
     first = json.loads(
         await supervisor.control_client.call_tool(
             "get_supervisor_skill",
-            {"skill_id": "supervisor.parallel-decomposition"},
+            {"skill_id": "supervisor.research"},
         )
     )
 
     second = json.loads(
         await supervisor.control_client.call_tool(
             "get_supervisor_skill",
-            {"skill_id": "supervisor.parallel-decomposition"},
+            {"skill_id": "supervisor.research"},
         )
     )
 
@@ -202,7 +221,7 @@ async def test_loading_the_same_methodology_reuses_it(
 
     # Loaded once, not duplicated in context.
     assert supervisor.loaded_supervisor_skills == [
-        "supervisor.parallel-decomposition"
+        "supervisor.research"
     ]
 
 
@@ -210,8 +229,16 @@ async def test_loading_the_same_methodology_reuses_it(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "worker_skill_id",
+    [
+        "research.web-search",
+        "coding.systematic-debugging",
+    ],
+)
 async def test_supervisor_rejects_a_worker_skill_id(
     monkeypatch: pytest.MonkeyPatch,
+    worker_skill_id: str,
 ) -> None:
     supervisor = build_supervisor(monkeypatch)
 
@@ -221,19 +248,28 @@ async def test_supervisor_rejects_a_worker_skill_id(
     ):
         await supervisor.control_client.call_tool(
             "get_supervisor_skill",
-            {"skill_id": "research.web-search"},
+            {"skill_id": worker_skill_id},
         )
 
     assert supervisor.loaded_supervisor_skills == []
 
 
-def test_worker_cannot_load_a_supervisor_methodology() -> None:
-    runtime, state = build_worker_runtime({"research"})
+@pytest.mark.parametrize(
+    "supervisor_skill_id",
+    [
+        "supervisor.research",
+        "supervisor.coding",
+    ],
+)
+def test_worker_cannot_load_a_supervisor_methodology(
+    supervisor_skill_id: str,
+) -> None:
+    runtime, state = build_worker_runtime({"research", "coding"})
 
-    result = runtime.load_skill(
-        "supervisor.parallel-decomposition"
-    )
+    result = runtime.load_skill(supervisor_skill_id)
 
+    # The 'supervisor' segment is not a Worker domain, so it is
+    # rejected before any filesystem resolution.
     assert result["ok"] is False
     assert result["error"] == (
         SecondBrainErrorCode.UNAUTHORIZED_SKILL.value
@@ -244,9 +280,7 @@ def test_worker_cannot_load_a_supervisor_methodology() -> None:
     # Worker loader only ever resolves vault/skills/.
     state.authorized_domains.add("supervisor")
 
-    result = runtime.load_skill(
-        "supervisor.parallel-decomposition"
-    )
+    result = runtime.load_skill(supervisor_skill_id)
 
     assert result["ok"] is False
     assert result["error"] == (
@@ -306,16 +340,17 @@ def test_supervisor_does_not_receive_get_skill(
         "   ",
         "supervisor",
         "supervisor.",
-        ".parallel-decomposition",
-        "supervisor.parallel-decomposition.extra",
-        "../supervisor_skills/parallel-decomposition",
+        ".coding",
+        "supervisor.coding.extra",
+        "../supervisor_skills/coding",
         "supervisor.../../coding",
-        "supervisor.parallel-decomposition/../x",
-        "supervisor.parallel decomposition",
-        "supervisor.Parallel-Decomposition",
-        "SUPERVISOR.parallel-decomposition",
-        "/supervisor.parallel-decomposition",
+        "supervisor.coding/../research",
+        "supervisor.cod ing",
+        "supervisor.Code",
+        "SUPERVISOR.coding",
+        "/supervisor.coding",
         "research.web-search",
+        "supervisor.unknown-methodology",
     ],
 )
 def test_invalid_supervisor_skill_ids_are_rejected(
@@ -352,7 +387,7 @@ async def test_loaded_methodologies_are_request_scoped(
 
     await request_a.control_client.call_tool(
         "get_supervisor_skill",
-        {"skill_id": "supervisor.parallel-decomposition"},
+        {"skill_id": "supervisor.research"},
     )
 
     # A later step of the same Request still has it.
@@ -365,7 +400,7 @@ async def test_loaded_methodologies_are_request_scoped(
     )
 
     assert request_a.loaded_supervisor_skills == [
-        "supervisor.parallel-decomposition"
+        "supervisor.research"
     ]
 
     # A different Request starts empty.
@@ -415,7 +450,7 @@ async def test_loading_a_methodology_changes_no_task_authority(
 
     await supervisor.control_client.call_tool(
         "get_supervisor_skill",
-        {"skill_id": "supervisor.parallel-decomposition"},
+        {"skill_id": "supervisor.research"},
     )
 
     # TaskState authority is untouched.
