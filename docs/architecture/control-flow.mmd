@@ -1,0 +1,56 @@
+sequenceDiagram
+  autonumber
+  participant U as Streamlit UI
+  participant A as FastAPI
+  participant O as Orchestrator
+  participant S as Supervisor
+  participant C as ControlTools
+  participant X as TaskExecutor
+  participant W as GenericWorker
+  participant B as SecondBrainRuntime
+  participant M as MCP server
+
+  U->>A: POST /requests
+  A->>A: reserve request id and write RequestRecord
+  A-->>U: submitted record
+  A->>O: submit Request in background task
+  O->>O: reserve id, await request semaphore
+  O->>S: construct Supervisor
+  S->>B: get_registry
+  B-->>S: REGISTRY.md
+  S->>W: create_agent with supervisor role and control tools only
+
+  loop until Supervisor is done
+    S->>W: run_step
+    W->>W: LLM turn, then dispatch authorization per tool call
+    alt delegation or escalation resolution
+      W->>C: delegate_task or resolve_escalation
+      C->>B: validate domain exists
+      C-->>S: Task plus TaskState in pending batch
+    end
+    S->>S: detach pending batch
+    loop concurrent batch, semaphore capped
+      S->>X: execute task and task_state
+      X->>B: load DOMAIN.md for each authorized domain
+      X->>X: derive allowed tools from TrustedDomainGrants
+      X->>M: get_tools existence check
+      X->>W: fresh Task Worker with get_skill and execution tools
+      W->>B: get_skill when needed
+      B-->>W: SkillProjection
+      W->>M: execution tool calls
+      W->>W: structured finalization
+      W-->>X: WorkerTaskResult or WorkerIterationExhausted
+      X-->>S: TaskOutcome
+    end
+    S->>S: apply_outcome, validate escalation, persist BLOCKED state
+    S->>W: append bounded outcome JSON to context
+    opt BLOCKED escalation approved or denied
+      W->>C: resolve_escalation on a later step
+      C->>S: apply_decision, same task_id, attempt plus one
+      S->>X: retry Task in the next batch
+    end
+  end
+
+  S-->>O: final result
+  O-->>A: result
+  A->>A: mark record completed or failed

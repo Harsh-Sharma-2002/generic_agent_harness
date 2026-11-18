@@ -1,0 +1,16 @@
+flowchart LR
+  TRACE["learning/data/traces/production/runtime.jsonl"] --> LOADER["learning/evaluation/loader.py<br/>load_executions"]
+  LOADER --> EVAL["ExecutionEvaluator<br/>deterministic calculator + SemanticJudge"]
+  EVAL --> CKPT["EvaluationCheckpoint<br/>learning/data/evaluations"]
+  EVAL --> AGG["aggregator.py<br/>BatchEvaluation"]
+  AGG --> TOOLS["learning/tools.py"]
+  CKPT --> TOOLS
+  TOOLS --> LSV["LearningSupervisor<br/>learning_supervisor.md"]
+  LSV -->|"propose_policy_candidate"| CAND["learning/data/candidates"]
+  LSV -->|"get_current_policy"| PROD["Production policy files"]
+  CAND --> REL["learning/release.py<br/>manual release"]
+  REL -->|"atomic write, previous version kept"| PROD
+  PROD --> REG["learning/data/registry<br/>release metadata"]
+  PROD --> API["api/app.py /dashboard/learning"]
+  CAND --> API
+  REG --> API

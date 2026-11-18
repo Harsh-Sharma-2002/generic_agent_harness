@@ -1,0 +1,116 @@
+flowchart TB
+  subgraph CLIENT["Clients and entry points"]
+    CHAT["ui/app.py<br/>Streamlit chat"]
+    OBS["ui/pages/1_Observability.py<br/>request and task dashboard"]
+    LUI["ui/pages/2_Offline_Learning.py<br/>read-only learning dashboard"]
+    START["start.sh<br/>MCP :8001, API :8000, UI :8501"]
+  end
+
+  subgraph API["api/app.py"]
+    FASTAPI["FastAPI app<br/>request_store, active_request_ids"]
+    BG["execute_request<br/>asyncio.create_task"]
+    PROJ["observability/projection.py<br/>project_request"]
+    TRACER["RuntimeTracer"]
+    FSINK["FrontendSink<br/>bounded live events"]
+    JSINK["JSONLSink<br/>runtime.jsonl"]
+    TSINK["TerminalSink"]
+  end
+
+  subgraph ORCH["orchestrator/"]
+    ORC["Orchestrator<br/>request admission semaphore"]
+  end
+
+  subgraph SUP["supervisor/"]
+    SUPV["Supervisor<br/>one per Request"]
+    CTL["SupervisorControlTools<br/>delegate_task, resolve_escalation"]
+    ESC["escalation.py<br/>validate, decide, merge"]
+    TSTATE["tasks/models.py::TaskState<br/>per task_id"]
+  end
+
+  subgraph TASKS["tasks/"]
+    TASK["Task + TaskStatus"]
+    TEX["TaskExecutor<br/>one attempt per call"]
+    TOUT["TaskOutcome"]
+  end
+
+  subgraph WORKER["worker/"]
+    FACT["factory.create_agent"]
+    GW["GenericWorker<br/>LLM loop + dispatch authorization"]
+    SKR["WorkerSkillRuntime<br/>SkillToolClient"]
+    LLM["LLMCaller or LocalLLMCaller"]
+  end
+
+  subgraph BRAIN["second_brain/ + vault/skills/"]
+    SBR["SecondBrainRuntime"]
+    REG["REGISTRY.md"]
+    DOM["DOMAIN.md per domain"]
+    SKILL["skill .md + YAML frontmatter"]
+  end
+
+  subgraph AUTH["tool_grants/"]
+    GRANTS["TrustedDomainGrants<br/>coding, research, data, teaching"]
+  end
+
+  subgraph MCP["mcp_server/"]
+    MCPC["MCPToolClient"]
+    MCPS["MCPServer<br/>streamable-http :8001"]
+    SHELL["shell"]
+    WEB["web_search"]
+    SQL["sql_executor"]
+  end
+
+  subgraph LEARN["learning/"]
+    LSV["LearningSupervisor"]
+    LTOOLS["LearningToolClient + tools.py"]
+    EVAL["ExecutionEvaluator<br/>SemanticJudge, aggregator, checkpoint"]
+    STORE["policies/store.py<br/>read production, write candidates"]
+    REL["release.py<br/>manual promotion only"]
+    LDATA["learning/data<br/>traces, evaluations, manifests,<br/>candidates, versions, registry"]
+  end
+
+  CHAT -->|"HTTP"| FASTAPI
+  OBS -->|"HTTP"| FASTAPI
+  LUI -->|"HTTP"| FASTAPI
+  START -.->|"starts"| FASTAPI
+  START -.->|"starts"| MCPS
+  FASTAPI --> BG --> ORC
+  ORC -->|"one Supervisor"| SUPV
+  FASTAPI --> TRACER
+  TRACER --> FSINK
+  TRACER --> JSINK
+  TRACER --> TSINK
+  FSINK --> PROJ
+  PROJ --> FASTAPI
+  SUPV --> CTL
+  SUPV --> ESC
+  SUPV --> TSTATE
+  SUPV --> TEX
+  TEX --> TASK
+  TEX --> TOUT
+  TEX --> FACT
+  FACT --> GW
+  TEX --> GRANTS
+  TEX --> SBR
+  GW --> LLM
+  GW --> SKR
+  SKR --> SBR
+  SBR --> REG
+  SBR --> DOM
+  SBR --> SKILL
+  GW -->|"execution tools only"| MCPC
+  MCPC --> MCPS
+  MCPS --> SHELL
+  MCPS --> WEB
+  MCPS --> SQL
+  JSINK --> LDATA
+  LDATA --> LTOOLS
+  LSV --> LTOOLS
+  LTOOLS --> EVAL
+  LTOOLS --> STORE
+  STORE --> LDATA
+  REL --> STORE
+  LSV -->|"create_agent"| FACT
+  GW -.->|"events"| TRACER
+  TEX -.->|"events"| TRACER
+  SUPV -.->|"events"| TRACER
+  ORC -.->|"events"| TRACER

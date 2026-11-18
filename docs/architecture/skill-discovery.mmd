@@ -1,0 +1,20 @@
+flowchart LR
+  REG["vault/skills/REGISTRY.md<br/>which domains exist"] --> DEL["Supervisor delegate_task<br/>validates domain with get_domain"]
+  DEL --> STATE["TaskState.authorized_domains"]
+  STATE --> CTX["TaskExecutor builds context<br/>task_worker.md + DOMAIN.md per domain<br/>+ resumable state"]
+  CTX --> MODEL["Task Worker model"]
+  MODEL --> CALL["get_skill with skill_id"]
+  CALL --> RT["SecondBrainRuntime.get_skill<br/>parse domain.skill"]
+  RT --> AUTH{"domain in<br/>authorized_domains?"}
+  AUTH -->|"no"| REJ["SecondBrainError<br/>UNAUTHORIZED_SKILL"]
+  AUTH -->|"yes"| FILE["vault/skills/domain/skill/skill.md"]
+  FILE --> META["YAML validation<br/>id, name, domain, description, related"]
+  META --> PROJ["SkillProjection<br/>name, description, body, related"]
+  PROJ --> LOAD["WorkerSkillRuntime.load_skill<br/>dedupe by canonical id<br/>skill_limit check"]
+  LOAD --> LS["TaskState.loaded_skills<br/>append canonical id"]
+  LOAD --> RESULT["model-facing tool result"]
+  META -.->|"related is navigation only"| MODEL
+  LS --> RESUME["resumable section<br/>next attempt"]
+  RESUME --> CTX
+  LIMIT["TaskState.skill_limit<br/>initial 5"] --> LOAD
+  ESC["Supervisor escalation<br/>SKILL_LIMIT_EXCEEDED"] --> LIMIT
