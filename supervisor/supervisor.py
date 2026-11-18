@@ -144,6 +144,14 @@ class Supervisor:
             or TrustedDomainGrants()
         )
 
+        # Supervisor decomposition methodologies loaded for this
+        # Request, in load order.
+        #
+        # Request-scoped planning context only: never persisted to
+        # TaskState, memory, or a session, and never consulted for
+        # authority. A new Request starts with an empty list.
+        self.loaded_supervisor_skills: list[str] = []
+
         # Escalations that passed deterministic validation and are
         # awaiting a Supervisor decision on a later step.
         self.resolved_escalations: dict[
@@ -197,10 +205,14 @@ class Supervisor:
 
         # Request-level agent instructions.
         #
-        # The Supervisor starts with its behavioral role plus the
-        # global skill REGISTRY. The registry is provided directly:
-        # it is not a control tool, and no DOMAIN.md or skill body is
-        # injected until a Task is delegated.
+        # The Supervisor starts with its behavioral role, the global
+        # Worker skill REGISTRY, and the Supervisor methodology index.
+        #
+        # REGISTRY.md advertises which Worker domains a Task may be
+        # authorized for; the Supervisor DOMAIN.md advertises which
+        # decomposition methodologies exist. Both are routing-level:
+        # no Worker DOMAIN.md, skill body, or Supervisor methodology
+        # body is injected until it is explicitly loaded.
         role_prompt = SUPERVISOR_ROLE_PATH.read_text(
             encoding="utf-8"
         )
@@ -213,10 +225,23 @@ class Supervisor:
                 f"{registry.message}"
             )
 
+        # Eager Supervisor methodology index only. Methodology bodies
+        # stay on disk until get_supervisor_skill loads one.
+        supervisor_index = (
+            self.second_brain.get_supervisor_domain()
+        )
+
+        if isinstance(supervisor_index, SecondBrainError):
+            raise RuntimeError(
+                "Could not load the Supervisor methodology index: "
+                f"{supervisor_index.message}"
+            )
+
         system_prompt = "\n\n".join(
             [
                 role_prompt,
                 registry,
+                supervisor_index,
             ]
         )
 
@@ -230,6 +255,7 @@ class Supervisor:
             allowed_tools={
                 "delegate_task",
                 "resolve_escalation",
+                "get_supervisor_skill",
             },
             max_iterations=max_iterations,
             verbose=verbose,

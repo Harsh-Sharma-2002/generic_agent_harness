@@ -63,14 +63,17 @@ async def test_supervisor_owns_second_brain_and_receives_registry(
     # TaskState registry starts empty and is owned per Request.
     assert supervisor.task_states == {}
 
-    # Two model-facing control tools: delegation and escalation.
+    # Three model-facing control tools: delegation, escalation, and
+    # Supervisor-only methodology loading.
     assert set(supervisor.control_client.tools) == {
         "delegate_task",
         "resolve_escalation",
+        "get_supervisor_skill",
     }
     assert supervisor.agent.allowed_tools == {
         "delegate_task",
         "resolve_escalation",
+        "get_supervisor_skill",
     }
 
 

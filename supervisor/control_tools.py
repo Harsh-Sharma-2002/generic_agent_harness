@@ -118,6 +118,40 @@ RESOLVE_ESCALATION_SCHEMA: dict[str, Any] = {
 }
 
 
+GET_SUPERVISOR_SKILL_SCHEMA: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "get_supervisor_skill",
+        "description": (
+            "Load one Supervisor decomposition methodology from the "
+            "Supervisor methodology index. Pass the canonical "
+            "Supervisor ID shown there, for example "
+            "'supervisor.parallel-decomposition'. A methodology is "
+            "planning guidance for this Request; it does not grant "
+            "Task domains, execution tools, Worker skills, or any "
+            "other authority. Loading a methodology that is already "
+            "loaded returns it again without loading it twice."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "skill_id": {
+                    "type": "string",
+                    "description": (
+                        "Canonical Supervisor skill ID: "
+                        "'supervisor.<methodology-name>'."
+                    ),
+                },
+            },
+            "required": [
+                "skill_id",
+            ],
+            "additionalProperties": False,
+        },
+    },
+}
+
+
 class SupervisorControlTools:
     """
     Privileged model-facing operations available to one Supervisor.
@@ -266,6 +300,99 @@ class SupervisorControlTools:
         # The model only needs the identifier.
         return {
             "task_id": task_id,
+        }
+
+    async def get_supervisor_skill(
+        self,
+        arguments: dict[str, Any],
+    ) -> dict[str, Any]:
+        """
+        Load one Supervisor decomposition methodology.
+
+        Resolution is delegated to the Second Brain runtime, which is
+        confined to ``vault/supervisor_skills/``. The only state this
+        touches is the Supervisor's Request-scoped loaded methodology
+        list: no Task, TaskState, domain, tool grant, or Worker skill
+        state can be changed here.
+        """
+
+        skill_id = arguments.get(
+            "skill_id"
+        )
+
+        if not isinstance(
+            skill_id,
+            str,
+        ) or not skill_id.strip():
+            raise ValueError(
+                "get_supervisor_skill requires a non-empty "
+                "'skill_id'."
+            )
+
+        requested = skill_id.strip()
+
+        self.supervisor._emit(
+            event="supervisor_skill_requested",
+            skill_id=requested,
+        )
+
+        loaded = (
+            self.supervisor.second_brain.get_supervisor_skill(
+                requested
+            )
+        )
+
+        if isinstance(
+            loaded,
+            SecondBrainError,
+        ):
+            self.supervisor._emit(
+                event="supervisor_skill_rejected",
+                skill_id=requested,
+                error=loaded.code.value,
+            )
+
+            raise ValueError(loaded.message)
+
+        canonical_id = loaded.metadata.skill_id
+
+        loaded_skills = (
+            self.supervisor.loaded_supervisor_skills
+        )
+
+        # Deterministic reuse: the same methodology is never loaded
+        # twice into one Request's context.
+        reused = canonical_id in loaded_skills
+
+        if not reused:
+            loaded_skills.append(canonical_id)
+
+        self.supervisor._emit(
+            event=(
+                "supervisor_skill_reused"
+                if reused
+                else "supervisor_skill_loaded"
+            ),
+            skill_id=canonical_id,
+            loaded_supervisor_skills=list(
+                loaded_skills
+            ),
+        )
+
+        projection = loaded.projection
+
+        return {
+            "ok": True,
+            "reused": reused,
+            "skill": {
+                "skill_id": canonical_id,
+                "name": projection.name,
+                "description": projection.description,
+                "content": projection.content,
+            },
+            "loaded_supervisor_skills": list(
+                loaded_skills
+            ),
         }
 
     async def resolve_escalation(
@@ -457,5 +584,9 @@ class SupervisorControlTools:
             "resolve_escalation": (
                 RESOLVE_ESCALATION_SCHEMA,
                 self.resolve_escalation,
+            ),
+            "get_supervisor_skill": (
+                GET_SUPERVISOR_SKILL_SCHEMA,
+                self.get_supervisor_skill,
             ),
         }

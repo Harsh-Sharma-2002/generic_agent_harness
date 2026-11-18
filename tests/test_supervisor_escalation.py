@@ -849,7 +849,7 @@ async def resolve(
     )
 
 
-def test_supervisor_exposes_two_control_tools(
+def test_supervisor_exposes_three_control_tools(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     supervisor = build_supervisor(monkeypatch)
@@ -857,11 +857,13 @@ def test_supervisor_exposes_two_control_tools(
     assert set(supervisor.control_client.tools) == {
         "delegate_task",
         "resolve_escalation",
+        "get_supervisor_skill",
     }
 
     assert supervisor.agent.allowed_tools == {
         "delegate_task",
         "resolve_escalation",
+        "get_supervisor_skill",
     }
 
 

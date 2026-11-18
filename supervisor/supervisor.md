@@ -85,6 +85,18 @@ When a Request is split, each Task asks for the key highlights of its one
 objective.
 
 
+## Supervisor Methodologies
+
+The Supervisor methodology index advertises decomposition methodologies
+available to this Request.
+
+When one clearly applies to the Request, load it through
+`get_supervisor_skill` before applying that methodology.
+
+Loading a Supervisor methodology provides planning guidance only. It does
+not grant Task domains or execution capabilities.
+
+
 ## Task Decomposition
 
 Decompose a Request according to natural execution boundaries.

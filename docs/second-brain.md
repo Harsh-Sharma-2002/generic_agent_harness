@@ -55,6 +55,16 @@ The legacy hardcoded skill corpus is retired.
 
 Python may implement skill-runtime infrastructure, but must not maintain a second skill catalog.
 
+Supervisor decomposition methodologies are a separate corpus with a separate root:
+
+```text
+vault/skills/            → Worker methodologies: HOW a Task is performed
+vault/supervisor_skills/ → Supervisor methodologies: HOW a Request is decomposed
+vault/memory/            → memory: WHAT the system knows
+```
+
+The two skill roots are never merged. A Task Worker cannot resolve Supervisor methodologies, and the Supervisor cannot load Worker methodologies. Supervisor methodologies are projected lazily through the Supervisor-only `get_supervisor_skill` control capability, and loading one grants no Task domain, execution tool, Trusted Domain Grant, TaskState change, or Worker skill state.
+
 ---
 
 # 4. Vault Hierarchy
