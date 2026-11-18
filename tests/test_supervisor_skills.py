@@ -116,7 +116,8 @@ def test_supervisor_index_and_methodologies_are_discoverable(
         assert not isinstance(loaded, SecondBrainError)
         assert loaded.metadata.skill_id == skill_id
         assert loaded.metadata.domain == "supervisor"
-        assert PLACEHOLDER in loaded.projection.content
+        assert PLACEHOLDER not in loaded.projection.content
+        assert "## Scope discipline" in loaded.projection.content
 
 
 def test_supervisor_vault_contains_only_domain_methodologies() -> None:
@@ -160,6 +161,7 @@ def test_startup_projection_is_index_only(
         assert heading not in system_prompt
 
     assert PLACEHOLDER not in system_prompt
+    assert "## Keep inside one Task" not in system_prompt
 
     assert supervisor.loaded_supervisor_skills == []
 
@@ -185,7 +187,8 @@ async def test_get_supervisor_skill_loads_and_records(
     assert result["skill"]["skill_id"] == "supervisor.research"
     assert result["skill"]["name"] == "research"
     assert "# Research Decomposition" in result["skill"]["content"]
-    assert PLACEHOLDER in result["skill"]["content"]
+    assert "## Keep inside one Task" in result["skill"]["content"]
+    assert "PLACEHOLDER" not in result["skill"]["content"]
 
     assert supervisor.loaded_supervisor_skills == [
         "supervisor.research"
