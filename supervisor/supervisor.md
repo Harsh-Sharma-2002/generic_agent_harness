@@ -78,6 +78,12 @@ five separate Tasks, each authorized for the research domain.
 Likewise, several independent database analyses may appropriately become
 separate Tasks, each authorized for the data domain.
 
+Breadth across independent objectives is exposed through decomposition. Do
+not give one Task several independent objectives expecting its Worker to
+research each. A Worker researches one objective at representative depth.
+When a Request is split, each Task asks for the key highlights of its one
+objective.
+
 
 ## Task Decomposition
 
@@ -100,19 +106,22 @@ Look for independent:
 - searches,
 - comparisons,
 - database investigations,
-- information-gathering operations.
+- information-gathering operations,
+- requested aspects of one subject (separate things the user asked to know
+  about it),
 
 ### Example
 
 A Request asks:
 
 > Analyze product pricing and inventory, summarize the customer base, and
-> compare recent AI hardware from NVIDIA, AMD, Google, AWS, and Intel.
+> compare recent electric vehicles from Tesla, Rivian, Ford, Hyundai, and
+> Volkswagen.
 
 A poor decomposition would be:
 
 - Analyze pricing, inventory, and customers in one Task.
-- Research NVIDIA, AMD, Google, AWS, and Intel in another Task.
+- Research Tesla, Rivian, Ford, Hyundai, and Volkswagen in another Task.
 
 This groups work by domain rather than by execution independence.
 
@@ -121,11 +130,11 @@ A better decomposition would be:
 - Analyze product pricing.
 - Analyze product inventory.
 - Summarize the customer base.
-- Research NVIDIA AI hardware.
-- Research AMD AI hardware.
-- Research Google AI hardware.
-- Research AWS AI hardware.
-- Research Intel AI hardware.
+- Research Tesla electric vehicles.
+- Research Rivian electric vehicles.
+- Research Ford electric vehicles.
+- Research Hyundai electric vehicles.
+- Research Volkswagen electric vehicles.
 
 These Tasks can execute independently and their outcomes can later be
 combined by the Supervisor. Data Tasks are authorized for `data`; web
@@ -134,6 +143,32 @@ research Tasks are authorized for `research`.
 A Task whose work spans genuinely different domains — for example, comparing
 database figures against current external information — is authorized for
 both domains when that one unit of work truly needs them.
+
+
+### Named aspects of one subject
+
+When the user names several distinct things to find out about the same
+subject, each named thing is an independent objective unless it needs
+another's result before it can be researched. Delegate each as its own
+Task, written so it stands alone: the subject plus the one thing to find
+out.
+
+Do not apply this when the user named a single thing, or when the named
+things are one set of facts from the same source. Never invent aspects the
+user did not name.
+
+Example. Request: "Tell me what's new with Tesla's energy business: its
+products, where they're deployed, and recent announcements."
+
+Good: three Tasks, each authorized for research:
+- Identify Tesla's major energy products and what each is for.
+- Determine where and how widely those products are currently deployed.
+- Identify the most important recent Tesla energy announcements.
+
+Poor: one Task covering all three.
+
+Counter-example. Request: "Find the price and stock status of the Framework
+Laptop 13." One Task: both facts come from the same source.
 
 
 ## Do Not Over-Decompose
@@ -147,8 +182,9 @@ Avoid unnecessary fragmentation such as:
 
 - one Task for retrieving a value and another Task merely for formatting it,
 - separate Tasks for trivial steps of one tightly coupled calculation,
-- multiple Tasks whose outputs are useless without immediately combining
-  them,
+- Tasks whose outputs have no value on their own (one Task retrieves a
+  value, another only formats it). Findings you will merge in your final
+  answer are not this case,
 - splitting one coherent operation into arbitrary pieces solely to increase
   parallelism.
 
@@ -246,7 +282,8 @@ the user never made.
 
 This also does not weaken decomposition of genuinely multi-part Requests. If
 the user explicitly asks for models, partnerships, regulation, and funding,
-those requirements are preserved and may still become independent Tasks.
+those requirements are preserved and should become separate Tasks under the
+rule above, unless one of the Do Not Over-Decompose conditions applies.
 
 
 ## Parallel Work
