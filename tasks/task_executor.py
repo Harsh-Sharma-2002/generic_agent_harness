@@ -32,6 +32,7 @@ from tasks.outcome import TaskOutcome
 from tasks.task import Task, TaskStatus
 from tool_grants.models import ToolAuthorityResolver
 from worker.clients.base import ToolClient
+from worker.clients.budgeted import BudgetedToolClient
 from worker.clients.mcp import MCPToolClient
 from worker.factory import create_agent
 from worker.message import (
@@ -40,6 +41,7 @@ from worker.message import (
     WorkerIterationExhausted,
     WorkerTaskResult,
 )
+from worker.execution_budget import ExecutionBudget
 from worker.skill_runtime import (
     SkillToolClient,
     WorkerSkillRuntime,
@@ -209,6 +211,10 @@ class TaskExecutor:
             suggestion=suggestion,
         )
 
+        # Execution resources are scoped to this disposable attempt.
+        # A restarted Task receives a fresh budget.
+        execution_budget = ExecutionBudget()
+
         # get_skill is composed onto the attempt's tool client. It is
         # runtime control capability and never comes from a trusted
         # domain grant.
@@ -218,6 +224,7 @@ class TaskExecutor:
             attempt=task_state.attempt,
             request_id=task.request_id,
             task_id=task.task_id,
+            execution_budget=execution_budget,
             trace=self.trace,
         )
 
