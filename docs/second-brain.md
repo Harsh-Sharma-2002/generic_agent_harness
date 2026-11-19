@@ -148,17 +148,21 @@ Obsidian links        = human projection
 
 ---
 
-# 7. Supervisor Starts With REGISTRY
+# 7. Supervisor Starts With Two Routing Indexes
 
 At Request start, Supervisor receives:
 
 ```text
 Supervisor instructions
 +
-Request
+skills/REGISTRY.md
 +
-REGISTRY.md
+supervisor_skills/DOMAIN.md
++
+Request
 ```
+
+`REGISTRY.md` advertises Worker execution domains. `supervisor_skills/DOMAIN.md` advertises Supervisor decomposition methodologies. Both are routing indexes: neither eagerly loads Worker `DOMAIN.md` files, Worker skill bodies, or Supervisor methodology bodies.
 
 It does NOT initially receive every:
 

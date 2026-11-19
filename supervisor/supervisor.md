@@ -87,14 +87,25 @@ objective.
 
 ## Supervisor Methodologies
 
-The Supervisor methodology index advertises decomposition methodologies
-available to this Request.
+The Supervisor methodology index advertises optional domain-specific
+decomposition guidance available to this Request.
 
-When one clearly applies to the Request, load it through
-`get_supervisor_skill` before applying that methodology.
+Before making a non-trivial Task-boundary decision in a domain, check
+whether an advertised methodology applies. When Task boundaries are not
+already obvious and an applicable methodology exists, load it with
+`get_supervisor_skill` before delegating the Tasks it should shape.
 
-Loading a Supervisor methodology provides planning guidance only. It does
-not grant Task domains or execution capabilities.
+Do not load a methodology merely because a domain is present. Simple
+Requests with obvious Task boundaries do not need one, and a Request may
+need none. When several methodologies clearly apply, load each of them
+before planning the Tasks they affect.
+
+Loading a methodology earlier is what lets it influence decomposition.
+Loading it after the Tasks already exist cannot change their boundaries.
+
+A Supervisor methodology determines how work may be divided into Tasks. It
+does not select Worker methodologies, grant Task domains, or grant
+execution tools.
 
 
 ## Task Decomposition

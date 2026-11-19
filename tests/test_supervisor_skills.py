@@ -323,6 +323,27 @@ async def test_task_worker_tool_projection_excludes_supervisor_tool() -> (
     assert WORKER_CONTROL_TOOLS == frozenset({"get_skill"})
 
 
+def test_supervisor_prompt_requires_a_methodology_checkpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Planning guidance must ask for discovery, without forcing it."""
+
+    supervisor = build_supervisor(monkeypatch)
+
+    prompt = supervisor.agent.system_prompt
+
+    assert "Before making a non-trivial Task-boundary decision" in prompt
+    assert "before delegating the Tasks it should shape" in prompt
+    assert (
+        "Do not load a methodology merely because a domain is present"
+        in prompt
+    )
+    assert "Loading a methodology earlier is what lets it influence" in (
+        prompt
+    )
+    assert "does not select Worker methodologies" in prompt
+
+
 def test_supervisor_does_not_receive_get_skill(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -508,3 +529,61 @@ def test_supervisor_skill_tool_has_no_authority_coupling() -> None:
         "escalation",
     ):
         assert forbidden not in body
+
+
+# I. Research methodology content contract
+
+
+def research_methodology_content() -> str:
+    """Return the normalized research methodology body."""
+
+    loaded = SecondBrainRuntime(VAULT_PATH).get_supervisor_skill(
+        "supervisor.research"
+    )
+
+    assert not isinstance(loaded, SecondBrainError)
+
+    return " ".join(loaded.projection.content.split()).lower()
+
+
+def test_research_methodology_separates_subject_from_objective() -> None:
+    content = research_methodology_content()
+
+    assert "shared subject is not shared information objective" in content
+    assert (
+        "same company, product family, technology, event, or subject"
+        in content
+    )
+    assert "independently useful" in content
+    assert "acme" in content
+
+
+def test_research_methodology_rejects_one_answer_as_a_merge_rule() -> None:
+    content = research_methodology_content()
+
+    assert "one final answer is not a reason to merge" in content
+    assert (
+        "number of user-facing answers does not determine" in content
+    )
+
+    # The over-aggressive old rule must not return.
+    assert "usually need one task" not in content
+    assert "several required dimensions but one answer" not in content
+    assert "whose evidence overlaps" not in content
+
+
+def test_research_methodology_keeps_task_and_worker_boundaries() -> None:
+    content = research_methodology_content()
+
+    assert "supervisor owns breadth" in content
+    assert "final synthesis" in content
+    assert (
+        "one query, one source, or one search round is not one task"
+        in content
+    )
+    assert (
+        "substantially duplicate the same retrieval and reasoning"
+        in content
+    )
+    assert "price and stock status" in content
+    assert "mechanically create one task per entity" in content
