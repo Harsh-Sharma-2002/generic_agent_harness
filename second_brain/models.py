@@ -53,6 +53,7 @@ class SkillMetadata:
     domain: str
     description: str
     related: tuple[RelatedSkill, ...]
+    tool_limit: dict[str,int]
 
 
 @dataclass(frozen=True, slots=True)

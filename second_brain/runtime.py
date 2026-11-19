@@ -368,7 +368,9 @@ class SecondBrainRuntime:
         )
 
     @staticmethod
-    def _parse_skill_id(skill_id: str) -> tuple[str, str] | None:
+    def _parse_skill_id(
+        skill_id: str,
+    ) -> tuple[str, str] | None:
         """Parse a canonical '<domain>.<skill-name>' identifier."""
 
         if not isinstance(skill_id, str):
@@ -557,12 +559,52 @@ class SecondBrainRuntime:
                 )
             )
 
+        # Runtime policy is optional. Skills without runtime policy
+        # remain unrestricted by methodology-specific tool limits.
+        raw_runtime = frontmatter.get("runtime", {})
+
+        if not isinstance(raw_runtime, dict):
+            return SecondBrainError(
+                code=SecondBrainErrorCode.SKILL_VALIDATION_ERROR,
+                message="Skill 'runtime' must be an object.",
+            )
+
+        # Tool limits are declared by the skill itself. The Second
+        # Brain only validates and carries them as trusted metadata;
+        # enforcement belongs to the Task-attempt execution runtime.
+        raw_tool_limits = raw_runtime.get("tool_limits", {})
+
+        if not isinstance(raw_tool_limits, dict):
+            return SecondBrainError(
+                code=SecondBrainErrorCode.SKILL_VALIDATION_ERROR,
+                message=(
+                    "Skill 'runtime.tool_limits' must be an object."
+                ),
+            )
+
+        for tool_name, limit in raw_tool_limits.items():
+            if (
+                not isinstance(tool_name, str)
+                or not tool_name.strip()
+                or isinstance(limit, bool)
+                or not isinstance(limit, int)
+                or limit <= 0
+            ):
+                return SecondBrainError(
+                    code=SecondBrainErrorCode.SKILL_VALIDATION_ERROR,
+                    message=(
+                        "Runtime tool limits must map non-empty "
+                        "tool names to positive integers."
+                    ),
+                )
+
         return SkillMetadata(
             skill_id=skill_id,
             name=name,
             domain=domain,
             description=description,
             related=tuple(related),
+            tool_limits=dict(raw_tool_limits),
         )
 
     @staticmethod

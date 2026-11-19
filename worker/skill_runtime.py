@@ -18,6 +18,7 @@ from second_brain.models import LoadedSkill, SecondBrainError
 from second_brain.runtime import SecondBrainRuntime
 from tasks.models import TaskState
 from worker.clients.base import ToolClient
+from worker.execution_budget import ExecutionBudget
 
 
 GET_SKILL_TOOL_SCHEMA: dict[str, Any] = {
@@ -61,6 +62,12 @@ class WorkerSkillRuntime:
 
     Owns the only mutation of ``TaskState.loaded_skills``: a successful
     ``SecondBrainRuntime`` resolution appends its canonical skill ID.
+
+    A newly loaded methodology may also declare execution-tool limits.
+    Those limits are registered with the attempt-scoped
+    ``ExecutionBudget``. They restrict existing execution authority;
+    they never grant new tools or domains.
+
     Failed, unauthorized, malformed, or over-limit requests change no
     state.
     """
@@ -73,6 +80,7 @@ class WorkerSkillRuntime:
         attempt: int,
         request_id: str,
         task_id: str,
+        execution_budget: ExecutionBudget,
         trace: RuntimeTracer | None = None,
     ) -> None:
         self.second_brain = second_brain
@@ -80,6 +88,7 @@ class WorkerSkillRuntime:
         self.attempt = attempt
         self.request_id = request_id
         self.task_id = task_id
+        self.execution_budget = execution_budget
         self.trace = trace
 
     def load_skill(
@@ -142,7 +151,8 @@ class WorkerSkillRuntime:
         domain = loaded.metadata.domain
 
         # Already loaded: return the projection again without
-        # consuming another slot. Accounting is by canonical ID.
+        # consuming another slot or registering its execution policy
+        # again. Accounting is by canonical ID.
         if canonical_id in self.task_state.loaded_skills:
             self._emit(
                 "skill_reused",
@@ -180,6 +190,14 @@ class WorkerSkillRuntime:
 
         self.task_state.loaded_skills.append(
             canonical_id
+        )
+
+        # Runtime policies are declared by the methodology but enforced
+        # by the attempt-scoped execution budget. Registering them here
+        # does not grant execution authority and does not reset already
+        # consumed budget.
+        self.execution_budget.register_tool_limits(
+            loaded.metadata.tool_limits
         )
 
         self._emit(
