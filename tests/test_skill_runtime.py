@@ -22,6 +22,7 @@ from second_brain.models import (
 from second_brain.runtime import SecondBrainRuntime
 from tasks.models import TaskState
 from tool_grants.registry import TrustedDomainGrants
+from worker.execution_budget import ExecutionBudget
 from worker.skill_runtime import (
     GET_SKILL_TOOL_SCHEMA,
     SKILL_LIMIT_REACHED,
@@ -134,6 +135,7 @@ def loaded_skill(
             domain=domain,
             description=f"{name} methodology",
             related=(),
+            tool_limits={},
         ),
         projection=SkillProjection(
             name=name,
@@ -172,6 +174,7 @@ def make_runtime(
         attempt=state.attempt,
         request_id="req-skill",
         task_id=state.task_id,
+        execution_budget=ExecutionBudget(),
         trace=trace,
     )
 

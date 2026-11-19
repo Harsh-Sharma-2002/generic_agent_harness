@@ -41,13 +41,22 @@ def test_web_search_prompt_contract() -> None:
     )
 
     for phrase in (
-        "search rounds",
-        "two rounds is the normal maximum",
-        "do not start a third round",
+        "absolute maximum of two `web_search` calls",
+        "hard execution limit",
+        "search 1: high-yield retrieval",
+        "search 2: one named gap",
+        "after search 2, searching is finished",
         "successor products",
-        "supervisor's job through separate tasks",
+        "supervisor's responsibility",
     ):
         assert phrase in text
+
+    for obsolete in (
+        "search rounds",
+        "two rounds is the normal maximum",
+        "exceed two rounds",
+    ):
+        assert obsolete not in text
 
     assert "there is no search quota" not in text
 

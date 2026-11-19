@@ -24,6 +24,7 @@ import asyncio
 from pathlib import Path
 from typing import Any, Callable
 
+from observability.sanitize import scrub_secret_tokens
 from observability.tracer import RuntimeTracer
 from second_brain.models import SecondBrainError
 from second_brain.runtime import SecondBrainRuntime
@@ -228,8 +229,20 @@ class TaskExecutor:
             trace=self.trace,
         )
 
-        worker_tools = SkillToolClient(
+        # Execution tools are wrapped so methodology-declared tool
+        # limits are enforced at the tool boundary. The wrapper only
+        # restricts already-authorized tools; it never grants one.
+        budgeted_tools = BudgetedToolClient(
             tools=tool_client,
+            budget=execution_budget,
+            request_id=task.request_id,
+            task_id=task.task_id,
+            attempt=task_state.attempt,
+            trace=self.trace,
+        )
+
+        worker_tools = SkillToolClient(
+            tools=budgeted_tools,
             skill_runtime=skill_runtime,
         )
 
@@ -722,6 +735,7 @@ class TaskExecutor:
             task=task,
             attempt=task_state.attempt,
             error=type(error).__name__,
+            error_message=scrub_secret_tokens(message),
         )
 
         return TaskOutcome(

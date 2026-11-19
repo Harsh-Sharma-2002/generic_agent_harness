@@ -24,6 +24,7 @@ from supervisor.supervisor import Supervisor
 from tasks.models import TaskState
 from tasks.request import Request
 from tasks.task_executor import WORKER_CONTROL_TOOLS
+from worker.execution_budget import ExecutionBudget
 from worker.skill_runtime import SkillToolClient, WorkerSkillRuntime
 
 
@@ -85,6 +86,7 @@ def build_worker_runtime(
         attempt=1,
         request_id="request-1",
         task_id="task-1",
+        execution_budget=ExecutionBudget(),
     )
 
     return runtime, state

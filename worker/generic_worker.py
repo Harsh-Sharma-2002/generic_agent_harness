@@ -15,6 +15,7 @@ from observability.sanitize import (
     build_arguments_trace,
     build_result_trace,
     scrub_error_message,
+    scrub_secret_tokens,
 )
 from observability.tracer import RuntimeTracer
 from worker.base import BaseWorker
@@ -840,5 +841,10 @@ class GenericWorker(BaseWorker):
             self._emit(
                 event="worker_failed",
                 error=type(exc).__name__,
+                # Bounded and scrubbed so the UI can distinguish a
+                # schema mismatch from an infrastructure failure.
+                error_message=scrub_secret_tokens(
+                    self._bounded_error(exc)
+                ),
             )
             raise

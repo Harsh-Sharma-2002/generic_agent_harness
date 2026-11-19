@@ -408,3 +408,54 @@ async def test_cancellation_propagates(
             make_task(),
             make_state(),
         )
+
+
+@pytest.mark.asyncio
+async def test_runtime_failure_is_reported_with_bounded_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The UI must not see a bare exception type.
+
+    A schema mismatch and an infrastructure failure are both
+    ``TypeError``/``RuntimeError``; only the bounded message lets an
+    operator tell them apart. Provider-looking tokens are scrubbed.
+    """
+
+    trace = RecordingTrace()
+
+    executor = make_executor(
+        monkeypatch,
+        AgentFactory(
+            FakeAgent(
+                error=TypeError(
+                    "SkillMetadata.__init__() got an unexpected "
+                    "keyword argument 'tool_limits' "
+                    "(token sk-abcdef1234567890)"
+                )
+            )
+        ),
+        trace=trace,
+    )
+
+    outcome = await executor.execute(
+        make_task(),
+        make_state(),
+    )
+
+    assert outcome.status is TaskStatus.FAILED
+
+    failed = [
+        event
+        for event in trace.events
+        if event["event"] == "task_failed"
+    ]
+
+    assert len(failed) == 1
+    assert failed[0]["error"] == "TypeError"
+
+    message = failed[0]["error_message"]
+
+    assert "unexpected keyword argument" in message
+    assert "sk-abcdef1234567890" not in message
+    assert "[REDACTED]" in message
+    assert len(message) <= 300
