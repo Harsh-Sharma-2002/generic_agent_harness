@@ -23,3 +23,4 @@ ratelimit.json
 audit.jsonl
 .env*
 !.env.example
+learning/data/traces/production/runtime.jsonl
