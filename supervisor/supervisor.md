@@ -347,6 +347,11 @@ of its authorized authority. That is a blocked Task, not a finished one. It
 retains its progress and can be continued, so do not re-delegate the same
 work as a fresh Task.
 
+A failed or blocked outcome does not automatically justify delegating a
+replacement Task. Do not recreate equivalent work merely to bypass a Worker
+methodology or execution budget. A fresh Task must represent a genuinely
+distinct unit of work, not additional capacity for work already attempted.
+
 Do not delegate another Task simply to restate, reformat, or reconfirm an
 adequate successful outcome.
 

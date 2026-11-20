@@ -20,7 +20,10 @@ from openai.types.chat import (
 
 from tasks.models import EscalationKind, EscalationRequest
 from worker.factory import create_agent
-from worker.generic_worker import GenericWorker
+from worker.generic_worker import (
+    FINALIZATION_INSTRUCTION,
+    GenericWorker,
+)
 from worker.message import (
     InvalidWorkerResult,
     WORKER_TASK_RESULT_RESPONSE_FORMAT,
@@ -713,3 +716,58 @@ async def test_iteration_budget_without_contract_still_fails() -> None:
             query="Inspect.",
             request_id="req-budget-fail",
         )
+
+
+# --------------------------------------------------------------------
+# Exhausted budget is not missing authority
+# --------------------------------------------------------------------
+
+
+def test_finalization_forbids_escalation_for_a_spent_budget() -> None:
+    """The packaged status must not treat a spent budget as a gap."""
+
+    text = " ".join(
+        FINALIZATION_INSTRUCTION.split()
+    ).lower()
+
+    assert (
+        "an exhausted execution budget, or a methodology retrieval "
+        "allowance that has been spent, is not missing authority"
+        in text
+    )
+    assert "tools you already held remain authorized" in text
+    assert "return 'completed'" in text
+    assert "do not request more of a capability that was already granted" in (
+        text
+    )
+
+
+def test_completed_result_may_report_an_unverified_detail() -> None:
+    """Useful evidence plus a stated limitation is a valid completion."""
+
+    result = WorkerTaskResult.from_payload(
+        {
+            "status": "completed",
+            "result": {
+                "content": (
+                    "Official evidence supports the broad timeline, "
+                    "but a more specific quarter could not be verified "
+                    "within the available evidence."
+                )
+            },
+            "progress": (
+                "Retrieved official availability evidence."
+            ),
+            "findings": [
+                "A broad availability window is supported."
+            ],
+            "artifacts": [],
+            "remaining_work": "",
+            "escalation": None,
+        }
+    )
+
+    assert result.status == "completed"
+    assert result.is_blocked is False
+    assert result.escalation is None
+    assert "could not be verified" in result.result["content"]

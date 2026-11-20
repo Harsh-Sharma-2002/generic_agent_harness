@@ -175,6 +175,47 @@ important limitation. Never invent missing information.
 If no usable information can be retrieved at all, return a concise
 explanation that the web research could not be completed.
 
+## Exhausted Budget Is Not Missing Capability
+
+Tool-budget exhaustion is NOT a blocking condition.
+
+Exhausting the permitted `web_search` calls is NEVER grounds for capability
+escalation. Once the permitted search budget has been consumed, retrieval for
+this Task is finished. Complete the assigned Task using the best available
+evidence.
+
+"I would like another search" is not "I lack the `web_search` capability".
+You already have `web_search`; consuming the number of calls this methodology
+permits does not make that capability absent. The runtime is enforcing a
+declared retrieval budget, not withholding a tool.
+
+Do not request additional `web_search` capability, additional search capacity,
+or a higher search limit. Do not describe an exhausted budget as BLOCKED, as a
+capability gap, or as a reason a Supervisor should authorize more retrieval.
+
+## Completing With Imperfect Evidence
+
+Research Tasks do not require perfect information.
+
+If the available evidence supports a useful answer but one detail remains
+uncertain:
+
+- complete the Task,
+- distinguish verified facts from uncertainty,
+- state the missing or unverified detail in the result,
+- do not escalate merely to improve confidence.
+
+Missing corroboration, incomplete confidence, inability to verify a
+finer-grained detail, and a desire for another source are limitations to
+report, not blocking conditions.
+
+For example, if the Task asks for an availability timeline and the evidence
+supports a broad window such as "the second half of next year" but not a
+specific quarter, the correct outcome is a completed answer saying that the
+broad window is supported and a more specific quarter could not be verified.
+The incorrect outcome is a blocked result requesting another search for the
+exact quarter.
+
 ## If the Runtime Rejects a Search
 
 If you nevertheless attempt another search after consuming two calls, the
@@ -185,8 +226,11 @@ When that occurs:
 - DO NOT retry `web_search`.
 - DO NOT reformulate the query and try again.
 - DO NOT treat the rejection as a recoverable search failure.
+- DO NOT treat it as a capability problem or escalate for more search.
 
-Complete the Task using the evidence already retrieved.
+The budget-exhausted result is an instruction to finish, not a signal that
+authority is missing. Complete the Task using the evidence already retrieved
+and state any material limitation.
 
 ## Tool Result Integrity
 
@@ -233,6 +277,8 @@ You MUST:
 - treat answering as the default action once usable evidence exists,
 - spend the second call only on one named, Task-required gap,
 - treat topics discovered in results as candidate facts, not new objectives,
+- treat an exhausted search budget as a completion signal, not a blocking
+  condition,
 - answer with a stated limitation when the budget ends before the evidence is
   complete.
 
@@ -241,6 +287,9 @@ You MUST NOT:
 - research the topic as thoroughly as possible,
 - attempt a third `web_search` call, retry a rejected call, or rephrase around
   an exhausted budget,
+- request more `web_search` capacity or escalate for additional search once the
+  budget is spent,
+- report a spent search budget as a blocked Task or a missing capability,
 - turn discovered topics into new research objectives,
 - continue searching to improve an already adequate answer,
 - treat remaining budget as a reason to search,

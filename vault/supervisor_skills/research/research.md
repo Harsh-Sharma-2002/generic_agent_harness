@@ -82,6 +82,52 @@ Supervisor.
 - All queries, sources, and retrieval rounds one objective needs.
 - Reconciling sources that disagree about the same fact.
 
+## Replacement Tasks are not extra retrieval
+
+A Worker owns retrieval for its objective, including deciding when the evidence
+it holds is sufficient. A methodology may therefore declare a retrieval budget,
+and a Worker that has spent it is expected to complete its Task with the
+evidence it gathered and state what it could not verify.
+
+Do not create a replacement research Task merely to continue retrieval for an
+objective whose previous Worker exhausted its methodology retrieval budget. A
+fresh Task must represent a genuinely distinct information objective, not
+additional retrieval capacity for an existing objective.
+
+These are not new information objectives when they merely continue the original
+Task:
+
+- verify further,
+- search deeper,
+- find another source,
+- corroborate this,
+- get more confidence,
+- look for a more precise date,
+- retry the same retrieval objective.
+
+A blocked research Task is not a gap in the plan to be filled by another Task.
+It is resumable work with preserved evidence: resolve it, continue it, or
+terminate it so its findings still contribute to the answer. Recreating it as a
+fresh Task would bypass both the Worker's judgment and any retrieval budget its
+methodology declares.
+
+## Legitimate follow-up research
+
+Genuine follow-up Tasks remain correct when earlier evidence creates a new
+information objective:
+
+- a finding reveals a distinct entity the Request explicitly requires
+  investigating,
+- an established fact creates a new dependency the Request asks to pursue,
+- a comparison becomes possible only once its sides are known under the same
+  criteria.
+
+The distinction is:
+
+NEW SEMANTIC OBJECTIVE → potentially a new Task.
+
+MORE RETRIEVAL FOR THE SAME OBJECTIVE → not a new Task.
+
 ## Natural dependencies
 
 - A conclusion that depends on what is found cannot be planned before that

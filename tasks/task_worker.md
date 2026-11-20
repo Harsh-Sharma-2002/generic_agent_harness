@@ -224,6 +224,43 @@ First use the authority and capabilities you already have effectively.
 
 ---
 
+## Missing Capability vs. Exhausted Budget
+
+Distinguish two different situations.
+
+**MISSING CAPABILITY** — the Task needs authority, a capability, required
+input, or a prerequisite that this attempt does not possess. This may justify a
+BLOCKED result and the matching escalation.
+
+**EXHAUSTED BUDGET FOR AN EXISTING CAPABILITY** — the capability is authorized
+and available, but the runtime or a methodology has already allowed as much of
+it as this attempt may use. This does NOT justify BLOCKED merely to obtain more
+capacity.
+
+Resource-budget exhaustion does not mean missing capability.
+
+If an authorized capability exists but its runtime or methodology budget has
+been exhausted, do NOT request that same capability through escalation. Asking
+for more of a tool you already hold is not an authority boundary, and the
+runtime rejects it.
+
+Instead:
+
+- complete the assigned Task using the work and evidence already available,
+- state material limitations explicitly in the result,
+- keep unverified details clearly separated from verified ones.
+
+Wanting more of an authorized resource is not the same as lacking it.
+
+Escalation remains correct when the Task genuinely cannot be completed without
+authority or input this attempt does not have — for example, required web
+research when the `research` domain was never authorized, required database
+access when the `data` domain is absent, missing required input, an unmet
+prerequisite, or a skill limit that genuinely prevents loading a needed
+methodology.
+
+---
+
 ## Blocking Is Not Failure
 
 An escalation means the Task is **BLOCKED**, not FAILED.
@@ -271,7 +308,9 @@ Do not claim completion when blocked.
 5. Methodologies never grant authority.
 6. Recover locally when possible.
 7. Escalate only when a required authority boundary prevents progress.
-8. Preserve useful Task state before escalation.
-9. Treat escalation as BLOCKED, not FAILED.
-10. When resumed, continue existing work rather than restarting.
-11. End with a complete final answer; the runtime finalizes it into the structured Task result.
+8. An exhausted budget for a capability you already have is not an authority
+   boundary; finish with what you have and state the limitation.
+9. Preserve useful Task state before escalation.
+10. Treat escalation as BLOCKED, not FAILED.
+11. When resumed, continue existing work rather than restarting.
+12. End with a complete final answer; the runtime finalizes it into the structured Task result.

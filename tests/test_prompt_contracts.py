@@ -77,3 +77,57 @@ def test_task_worker_prompt_contract() -> None:
         "proportional to the task",
     ):
         assert phrase in text
+
+
+def test_web_search_budget_exhaustion_is_not_an_escalation() -> None:
+    text = _normalized(
+        "vault/skills/research/web-search/web-search.md"
+    )
+
+    for phrase in (
+        "tool-budget exhaustion is not a blocking condition",
+        "never grounds for capability escalation",
+        "complete the assigned task using the best available evidence",
+        "research tasks do not require perfect information",
+        "state the missing or unverified detail",
+        "do not request additional `web_search` capability",
+        "not a signal that authority is missing",
+    ):
+        assert phrase in text
+
+    # No surviving language offering retrieval beyond the budget.
+    for obsolete in (
+        "exceptional extra search",
+        "third search",
+        "ask the supervisor for more searches",
+        "you may request additional searches",
+    ):
+        assert obsolete not in text
+
+
+def test_task_worker_budget_is_not_missing_capability() -> None:
+    text = _normalized("tasks/task_worker.md")
+
+    for phrase in (
+        "missing capability",
+        "exhausted budget for an existing capability",
+        "resource-budget exhaustion does not mean missing capability",
+        "do not request that same capability through escalation",
+        "work and evidence already available",
+        "wanting more of an authorized resource is not the same as lacking it",
+        "is not an authority boundary",
+    ):
+        assert phrase in text
+
+
+def test_supervisor_does_not_recreate_work_to_bypass_budgets() -> None:
+    text = _normalized("supervisor/supervisor.md")
+
+    for phrase in (
+        "a failed or blocked outcome does not automatically justify "
+        "delegating a replacement task",
+        "do not recreate equivalent work merely to bypass a worker "
+        "methodology or execution budget",
+        "not additional capacity for work already attempted",
+    ):
+        assert phrase in text

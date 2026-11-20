@@ -589,3 +589,41 @@ def test_research_methodology_keeps_task_and_worker_boundaries() -> None:
     )
     assert "price and stock status" in content
     assert "mechanically create one task per entity" in content
+
+
+def test_research_methodology_forbids_replacement_retrieval_tasks() -> (
+    None
+):
+    content = research_methodology_content()
+
+    for phrase in (
+        "replacement tasks are not extra retrieval",
+        "do not create a replacement research task",
+        "genuinely distinct information objective",
+        "additional retrieval capacity",
+        "exhausted its methodology retrieval budget",
+        "verify further",
+        "search deeper",
+        "find another source",
+        "corroborate this",
+        "get more confidence",
+        "look for a more precise date",
+        "retry the same retrieval objective",
+    ):
+        assert phrase in content
+
+    # A blocked Task is resumable work, not a hole to fill with a Task.
+    assert "resumable work with preserved evidence" in content
+    assert "not a gap in the plan to be filled by another task" in content
+
+
+def test_research_methodology_preserves_legitimate_follow_up() -> None:
+    content = research_methodology_content()
+
+    assert "legitimate follow-up research" in content
+    assert (
+        "distinct entity the request explicitly requires"
+        in content
+    )
+    assert "new semantic objective" in content
+    assert "more retrieval for the same objective" in content

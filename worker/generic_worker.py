@@ -43,6 +43,14 @@ requires authority you do not have. In that case preserve the work
 completed so far and include exactly one escalation object describing
 the required authority.
 
+An exhausted execution budget, or a methodology retrieval allowance
+that has been spent, is not missing authority. Tools you already held
+remain authorized; their permitted amount is simply used up. When the
+Task produced useful work within the authority and tools you had,
+return 'completed' and record what could not be verified as a
+limitation in 'result'. Do not request more of a capability that was
+already granted.
+
 Return one JSON object matching this schema:
 
 {schema}
