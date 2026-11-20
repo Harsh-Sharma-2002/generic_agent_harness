@@ -26,11 +26,11 @@ Use this domain when a Task's objective is to investigate, change, verify, or op
 
 ### [[skills/coding/codebase-inspection/codebase-inspection|coding.codebase-inspection]]
 
-**Use when:** The Task needs a repository measured — size, language breakdown, file counts, or code-versus-comment ratios.
+**Use when:** The Task must inspect a repository — measuring its size, language breakdown, file counts, or code-versus-comment ratios, and using that composition data to orient the inspection and locate the concrete code to examine.
 
-Produces quantitative composition data about a codebase; it does not judge whether the code is good.
+Produces quantitative composition data about a codebase and the structural map an inspection starts from. The quality judgement itself remains the Worker's; the methodology does not supply a verdict.
 
-**Avoid when:** The Task is about the quality, correctness, or purpose of the code rather than its size.
+**Avoid when:** The Task is to explain a programming concept, or otherwise needs no inspection of the repository at all.
 
 ### [[skills/coding/dogfood/dogfood|coding.dogfood]]
 

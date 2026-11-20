@@ -7,5 +7,5 @@ class BaseWorker(ABC):
     """
 
     @abstractmethod
-    async def run(self,query: str, request_id: str) -> dict[str,Any]:
+    async def run(self,query: str, request_id: str) -> Any:
         ...

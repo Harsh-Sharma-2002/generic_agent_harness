@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from typing import Any
 
 from observability.tracer import RuntimeTracer
 from worker.base import BaseWorker
@@ -22,6 +23,9 @@ def create_agent(
     verbose: bool = False,
     local: bool = False,
     worker_role: str = "worker",
+    final_response_format: (
+        dict[str, Any] | None
+    ) = None,
     trace: RuntimeTracer | None = None,
 ) -> BaseWorker:
     """
@@ -47,6 +51,7 @@ def create_agent(
             verbose=verbose,
             local=local,
             worker_role=worker_role,
+            final_response_format=final_response_format,
             trace=trace,
         )
 

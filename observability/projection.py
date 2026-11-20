@@ -264,6 +264,32 @@ def _project_supervisor(
         else None
     )
 
+    # Supervisor decomposition methodologies loaded during the
+    # Request, in load order. Emitted by the control tool; raw
+    # events remain the source of truth.
+    loaded_skills: list[str] = []
+
+    for event in events:
+        if (
+            event.component != "supervisor"
+            or event.event
+            not in (
+                "supervisor_skill_loaded",
+                "supervisor_skill_reused",
+            )
+        ):
+            continue
+
+        loaded = event.data.get(
+            "loaded_supervisor_skills"
+        )
+
+        if isinstance(loaded, list):
+            loaded_skills = [
+                str(skill_id)
+                for skill_id in loaded
+            ]
+
     return {
         "status": status,
         "started_at": _iso(
@@ -276,6 +302,7 @@ def _project_supervisor(
             started_at,
             completed_at,
         ),
+        "loaded_skills": loaded_skills,
     }
 
 

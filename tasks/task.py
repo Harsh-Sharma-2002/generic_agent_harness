@@ -28,15 +28,17 @@ class Task:
 
     task_id identifies this specific unit of work within
     that request.
+
+    A Task is the semantic definition of the work and its lifecycle.
+    It does not carry execution state: progress, loaded skills,
+    attempts, and escalation belong to TaskState, which persists
+    across execution attempts.
     """
 
     request_id: str
     task_id: str
     query: str
 
-    skill_names: list[str] 
-    #parent_task_id: str 
+    authorized_domains: list[str]
 
     status: TaskStatus = TaskStatus.QUEUED
-
-    

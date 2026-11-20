@@ -9,6 +9,7 @@ they never influence it.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 # Trace bounds (in bytes, UTF-8 encoded).
@@ -23,6 +24,29 @@ CONSOLE_VALUE_CHAR_LIMIT = 120
 # Marker used to replace secret values.
 
 REDACTED = "[REDACTED]"
+
+# Provider tokens that can appear inside exception messages.
+
+_SECRET_VALUE_PATTERN = re.compile(
+    r"(?:sk|ghp|ghs|gho|ghu|github_pat|xox[baprs])[-_][A-Za-z0-9_\-]{8,}"
+)
+
+
+def scrub_secret_tokens(
+    text: str,
+) -> str:
+    """
+    Replace provider-looking tokens embedded in free text.
+
+    Exception messages are the only intended input: they are
+    bounded and scrubbed before reaching observability events.
+    """
+
+    return _SECRET_VALUE_PATTERN.sub(
+        REDACTED,
+        text,
+    )
+
 
 # Substring markers that identify a secret-bearing key.
 

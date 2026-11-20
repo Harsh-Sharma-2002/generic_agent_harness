@@ -55,6 +55,25 @@ The legacy hardcoded skill corpus is retired.
 
 Python may implement skill-runtime infrastructure, but must not maintain a second skill catalog.
 
+Supervisor decomposition methodologies are a separate corpus with a separate root, grouped by the same semantic domains as Worker skills but doing a different job:
+
+```text
+vault/skills/            → Worker execution methodologies, grouped by execution domain
+vault/supervisor_skills/ → Supervisor decomposition methodologies, grouped by the same semantic domains
+vault/memory/            → experiential/user memory
+```
+
+The two skill roots are never merged. A Task Worker cannot resolve Supervisor methodologies, and the Supervisor cannot load Worker methodologies. Supervisor methodologies are projected lazily through the Supervisor-only `get_supervisor_skill` control capability, and loading one grants no Task domain, execution tool, Trusted Domain Grant, TaskState change, or Worker skill state.
+
+A Supervisor domain skill is not Worker domain authorization. Loading `supervisor.research` teaches the Supervisor how research work might be decomposed; it does not add `research` to any Task's `authorized_domains`.
+
+```text
+supervisor.md                  → generic orchestration invariants
+supervisor.<domain>            → how work in that domain is decomposed
+skills/<domain>/DOMAIN.md      → which execution methodologies a Worker may choose
+skills/<domain>/<skill>.md     → how one Task is performed
+```
+
 ---
 
 # 4. Vault Hierarchy
@@ -129,17 +148,21 @@ Obsidian links        = human projection
 
 ---
 
-# 7. Supervisor Starts With REGISTRY
+# 7. Supervisor Starts With Two Routing Indexes
 
 At Request start, Supervisor receives:
 
 ```text
 Supervisor instructions
 +
-Request
+skills/REGISTRY.md
 +
-REGISTRY.md
+supervisor_skills/DOMAIN.md
++
+Request
 ```
+
+`REGISTRY.md` advertises Worker execution domains. `supervisor_skills/DOMAIN.md` advertises Supervisor decomposition methodologies. Both are routing indexes: neither eagerly loads Worker `DOMAIN.md` files, Worker skill bodies, or Supervisor methodology bodies.
 
 It does NOT initially receive every:
 
