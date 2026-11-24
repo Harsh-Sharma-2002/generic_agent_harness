@@ -1,4 +1,4 @@
-"""Structural contracts for Supervisor-only decomposition skills.
+"""Structural contracts for Supervisor-only methodologies.
 
 These prove the scaffolding only: that Supervisor methodologies exist in
 their own vault root, are advertised through the Supervisor index, load
@@ -35,6 +35,7 @@ SUPERVISOR_SKILL_IDS = (
     "supervisor.research",
     "supervisor.teaching",
     "supervisor.data",
+    "supervisor.context-allocation",
 )
 
 PLACEHOLDER = (
@@ -46,6 +47,7 @@ METHODOLOGY_HEADINGS = (
     "# Research Decomposition",
     "# Teaching Decomposition",
     "# Data Decomposition",
+    "# Context Allocation",
 )
 
 
@@ -122,7 +124,7 @@ def test_supervisor_index_and_methodologies_are_discoverable(
         assert "## Scope discipline" in loaded.projection.content
 
 
-def test_supervisor_vault_contains_only_domain_methodologies() -> None:
+def test_supervisor_vault_contains_only_methodologies() -> None:
     root = VAULT_PATH / "supervisor_skills"
 
     directories = {
@@ -134,11 +136,52 @@ def test_supervisor_vault_contains_only_domain_methodologies() -> None:
         "research",
         "teaching",
         "data",
+        "context-allocation",
     }
 
     assert {
         path.name for path in root.glob("*.md")
     } == {"DOMAIN.md"}
+
+
+CONTEXT_ALLOCATION_PATH = (
+    VAULT_PATH
+    / "supervisor_skills"
+    / "context-allocation"
+    / "context-allocation.md"
+)
+
+
+def test_context_allocation_methodology_is_structurally_valid() -> None:
+    """The context methodology uses the Supervisor file convention."""
+
+    assert CONTEXT_ALLOCATION_PATH.is_file()
+
+    runtime = SecondBrainRuntime(VAULT_PATH)
+
+    index = runtime.get_supervisor_domain()
+
+    assert isinstance(index, str)
+
+    # Advertised as a context methodology, not as another work domain.
+    assert "## Domain Decomposition Methodologies" in index
+    assert "## Context Methodology" in index
+    assert index.index("## Context Methodology") < index.index(
+        "supervisor.context-allocation"
+    )
+
+    loaded = runtime.get_supervisor_skill(
+        "supervisor.context-allocation"
+    )
+
+    assert not isinstance(loaded, SecondBrainError)
+    assert loaded.metadata.skill_id == "supervisor.context-allocation"
+    assert loaded.metadata.name == "context-allocation"
+    assert loaded.metadata.domain == "supervisor"
+    assert loaded.metadata.description.strip()
+    assert loaded.metadata.related == ()
+
+    assert "# Context Allocation" in loaded.projection.content
 
 
 # B. Startup projection
@@ -264,6 +307,7 @@ async def test_supervisor_rejects_a_worker_skill_id(
     [
         "supervisor.research",
         "supervisor.coding",
+        "supervisor.context-allocation",
     ],
 )
 def test_worker_cannot_load_a_supervisor_methodology(
@@ -444,8 +488,16 @@ async def test_loaded_methodologies_are_request_scoped(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "methodology",
+    [
+        "supervisor.research",
+        "supervisor.context-allocation",
+    ],
+)
 async def test_loading_a_methodology_changes_no_task_authority(
     monkeypatch: pytest.MonkeyPatch,
+    methodology: str,
 ) -> None:
     supervisor = build_supervisor(monkeypatch)
 
@@ -476,7 +528,7 @@ async def test_loading_a_methodology_changes_no_task_authority(
 
     await supervisor.control_client.call_tool(
         "get_supervisor_skill",
-        {"skill_id": "supervisor.research"},
+        {"skill_id": methodology},
     )
 
     # TaskState authority is untouched.
